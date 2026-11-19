@@ -12,10 +12,9 @@ Foundry-fallback classifier, and the recap generator.
    session, in order (the chatbot uses prior turns for continuity).
 3. `POST /chat/{session_id}/end` when a session's lines are done — this marks the
    session completed and generates the recap (`GET` it back via the recaps router).
-4. Two modules in the codebase are **not** wired into this flow and can be ignored
-   when predicting behavior: `services/checkin_flow.py` (fixed-step scripts,
-   superseded by the free-form Foundry chatbot) and `services/crisis.py` (superseded
-   by `services/safety.py`, which is what `chat_orchestrator.py` actually calls).
+4. `services/checkin_flow.py` is **not** wired into this flow and can be ignored
+   when predicting behavior (fixed-step scripts, superseded by the free-form
+   Foundry chatbot). Crisis screening is `services/safety.py`.
 5. Everything under "Extraction reference" below is regex, not the ML model — it's
    deterministic and a good way to sanity-check what a session *should* produce
    before you look at the DB row.

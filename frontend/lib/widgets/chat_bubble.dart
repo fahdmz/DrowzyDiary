@@ -39,20 +39,38 @@ class ChatBubble extends StatelessWidget {
   }
 
   Widget _crisisText() {
-    return RichText(
-      text: TextSpan(
-        style: TextStyle(fontSize: 14.5, height: 1.55, color: palette.text),
-        children: [
-          TextSpan(text: message.crisisPrefix ?? ''),
-          TextSpan(
-            text: message.crisisPhone ?? '',
-            style: const TextStyle(fontWeight: FontWeight.w800, decoration: TextDecoration.underline),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () => launchUrl(Uri.parse('tel:119')),
-          ),
-          TextSpan(text: message.crisisSuffix ?? ''),
-        ],
-      ),
+    final text = message.text;
+    final hasText = text != null && text.trim().isNotEmpty;
+    final style = TextStyle(fontSize: 14.5, height: 1.55, color: palette.text);
+    if (!hasText) {
+      return RichText(
+        text: TextSpan(
+          style: style,
+          children: [
+            TextSpan(text: message.crisisPrefix ?? ''),
+            TextSpan(
+              text: message.crisisPhone ?? '',
+              style: const TextStyle(fontWeight: FontWeight.w800, decoration: TextDecoration.underline),
+              recognizer: TapGestureRecognizer()..onTap = _callCrisisLine,
+            ),
+            TextSpan(text: message.crisisSuffix ?? ''),
+          ],
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(text, style: style),
+        const SizedBox(height: 10),
+        TextButton.icon(
+          onPressed: _callCrisisLine,
+          icon: const Icon(Icons.phone, size: 18),
+          label: const Text('119'),
+        ),
+      ],
     );
   }
+
+  static Future<void> _callCrisisLine() => launchUrl(Uri.parse('tel:119'));
 }

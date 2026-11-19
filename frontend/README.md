@@ -90,8 +90,8 @@ where the OAuth redirect goes through the browser's own URL instead.
   (`mock_data.dart`) — real speech-to-text isn't wired up yet. Everything
   downstream of that (chat replies, crisis detection, sleep-factor
   detection) is real and comes from the backend.
-- The crisis-line handling (SEJIWA, 119 ext. 8) is a real rule-based check
-  on the backend (`app/services/crisis.py`), not LLM-decided.
+- The crisis-line handling (Healing119, 119 ext. 8) is a real rule-based check
+  on the backend (`app/services/safety.py`), not LLM-decided.
 - A few icons (mic, send, back, delete, nav icons) use standard Material
   icons as stand-ins for the design's hand-drawn SVGs; the moon and sun,
   which recur throughout and define the app's day/night identity, are
