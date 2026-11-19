@@ -39,7 +39,7 @@ class _BreathingCircleState extends State<BreathingCircle> with SingleTickerProv
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
-                  colors: [widget.color.withOpacity(0.35), widget.color.withOpacity(0)],
+                  colors: [widget.color.withValues(alpha: 0.35), widget.color.withValues(alpha: 0)],
                 ),
               ),
             ),

@@ -105,7 +105,7 @@ class NotificationBanner extends StatelessWidget {
                 child: Container(
                   width: 22,
                   height: 22,
-                  decoration: BoxDecoration(color: const Color(0x14FFFFFF), shape: BoxShape.circle),
+                  decoration: const BoxDecoration(color: Color(0x14FFFFFF), shape: BoxShape.circle),
                   child: const Icon(Icons.close, size: 11, color: Color(0x80EDE7E2)),
                 ),
               ),

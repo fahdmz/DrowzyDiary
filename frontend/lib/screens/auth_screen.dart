@@ -70,10 +70,10 @@ class _AuthScreenState extends State<AuthScreen> {
                     SizedBox(height: 10),
                   ],
                 ),
-                Center(
+                const Center(
                   child: Text(
                     'DrowzyDiary',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFFEDE7E2),

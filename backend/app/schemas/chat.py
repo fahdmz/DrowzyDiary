@@ -1,10 +1,11 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints
 
 CheckinMode = Literal["night", "morning"]
 Language = Literal["en", "id"]
+MAX_MESSAGE_LENGTH = 2000
 SessionStatus = Literal["active", "completed"]
 
 
@@ -13,7 +14,7 @@ class StartSessionRequest(BaseModel):
     language: Language = "en"
     # Defaults to Asia/Jakarta (+7h) to match this product's Indonesia-first
     # audience when an older client doesn't send its real local offset.
-    timezone_offset_minutes: int = 420
+    timezone_offset_minutes: int = Field(420, ge=-720, le=840)
 
 
 class ChatMessageOut(BaseModel):
@@ -36,7 +37,9 @@ class StartSessionResponse(BaseModel):
 
 class SendMessageRequest(BaseModel):
     session_id: str
-    text: str
+    text: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_MESSAGE_LENGTH)
+    ]
     language: Language = "en"
 
 

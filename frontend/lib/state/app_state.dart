@@ -110,6 +110,10 @@ class AppState extends ChangeNotifier {
   InputMode inputMode = InputMode.stt;
   bool isRecording = false;
   bool aiTyping = false;
+  // Bubble (and its trailing error notice) of a send that failed; resending
+  // the same text reuses it, matching ChatService reusing the idempotency key.
+  ChatMessage? _unconfirmedBubble;
+  ChatMessage? _unconfirmedError;
   String? _currentSessionId;
   bool checkinCompleted = false;
 
@@ -401,10 +405,17 @@ class AppState extends ChangeNotifier {
       return;
     }
 
-    messages.add(ChatMessage(
-        id: DateTime.now().microsecondsSinceEpoch,
-        sender: MessageSender.user,
-        text: text));
+    final previous = _unconfirmedBubble;
+    if (previous != null && previous.text == text && messages.contains(previous)) {
+      messages.remove(_unconfirmedError);
+    } else {
+      _unconfirmedBubble = ChatMessage(
+          id: DateTime.now().microsecondsSinceEpoch,
+          sender: MessageSender.user,
+          text: text);
+      messages.add(_unconfirmedBubble!);
+    }
+    _unconfirmedError = null;
     draft = '';
     aiTyping = true;
     notifyListeners();
@@ -412,6 +423,7 @@ class AppState extends ChangeNotifier {
     try {
       final result = await _chatService.sendMessage(
           sessionId: sessionId, text: text, language: lang.name);
+      _unconfirmedBubble = null;
       messages.add(result.aiMessage);
       _speak(result.aiMessage);
       _refreshStatsAfterChatTurn(sessionCompleted: result.sessionCompleted);
@@ -420,15 +432,17 @@ class AppState extends ChangeNotifier {
       debugPrint('Sending message failed: $e');
       if (e is ApiException && e.isRateLimited) {
         // Rejected before anything was saved: hand the text back to retry.
-        messages.removeLast();
+        messages.remove(_unconfirmedBubble);
+        _unconfirmedBubble = null;
         draft = text;
         _showBanner(message: t.noticeRateLimited);
       } else {
-        messages.add(ChatMessage(
+        _unconfirmedError = ChatMessage(
           id: DateTime.now().microsecondsSinceEpoch,
           sender: MessageSender.ai,
           text: _connectionErrorText,
-        ));
+        );
+        messages.add(_unconfirmedError!);
       }
     } finally {
       aiTyping = false;

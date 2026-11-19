@@ -7,10 +7,11 @@ import 'auth_service.dart';
 import 'env.dart';
 
 class ApiException implements Exception {
-  ApiException(this.statusCode, this.body);
+  ApiException(this.statusCode, this.body, {this.retryAfter});
 
   final int statusCode;
   final String body;
+  final Duration? retryAfter;
 
   bool get isRateLimited => statusCode == 429;
   bool get isUnavailable => statusCode == 503;
@@ -58,42 +59,55 @@ class ApiClient {
     return Uri.parse('${Env.apiBaseUrl}$path').replace(queryParameters: clean);
   }
 
-  Future<dynamic> get(String path, {Map<String, String>? query}) async {
-    final res = await _send(path, (h) => _client.get(_uri(path, query), headers: h));
+  Future<dynamic> get(String path,
+      {Map<String, String>? query, Duration? timeout}) async {
+    final res = await _send(
+        path, (h) => _client.get(_uri(path, query), headers: h),
+        timeout: timeout);
     return _decode(res);
   }
 
-  Future<dynamic> post(String path, {Object? body}) async {
+  Future<dynamic> post(String path,
+      {Object? body, Map<String, String>? headers, Duration? timeout}) async {
     final res = await _send(
         path,
         (h) => _client.post(_uri(path),
-            headers: h, body: body == null ? null : jsonEncode(body)));
+            headers: h, body: body == null ? null : jsonEncode(body)),
+        headers: headers,
+        timeout: timeout);
     return _decode(res);
   }
 
-  Future<dynamic> patch(String path, {Object? body}) async {
+  Future<dynamic> patch(String path, {Object? body, Duration? timeout}) async {
     final res = await _send(
         path,
         (h) => _client.patch(_uri(path),
-            headers: h, body: body == null ? null : jsonEncode(body)));
+            headers: h, body: body == null ? null : jsonEncode(body)),
+        timeout: timeout);
     return _decode(res);
   }
 
-  Future<void> delete(String path) async {
-    final res = await _send(path, (h) => _client.delete(_uri(path), headers: h));
-    if (res.statusCode >= 400) throw ApiException(res.statusCode, res.body);
+  Future<void> delete(String path, {Duration? timeout}) async {
+    final res = await _send(
+        path, (h) => _client.delete(_uri(path), headers: h),
+        timeout: timeout);
+    if (res.statusCode >= 400) throw _exception(res);
   }
 
   /// Sends with a timeout. On a 401 it refreshes the Supabase session once and
   /// retries once; if the retry is still a 401, the local session is ended so
-  /// AppState's auth listener returns the user to the auth screen.
+  /// AppState's auth listener returns the user to the auth screen. [headers]
+  /// are sent unchanged on the retry (e.g. the same Idempotency-Key).
   Future<http.Response> _send(
     String path,
-    Future<http.Response> Function(Map<String, String> headers) call,
-  ) async {
-    Future<http.Response> attempt() => call(_headers).timeout(
-          _timeout,
-          onTimeout: () => throw ApiTimeoutException(path, _timeout),
+    Future<http.Response> Function(Map<String, String> headers) call, {
+    Map<String, String>? headers,
+    Duration? timeout,
+  }) async {
+    final limit = timeout ?? _timeout;
+    Future<http.Response> attempt() => call({..._headers, ...?headers}).timeout(
+          limit,
+          onTimeout: () => throw ApiTimeoutException(path, limit),
         );
 
     var res = await attempt();
@@ -107,8 +121,14 @@ class ApiClient {
     return res;
   }
 
+  ApiException _exception(http.Response res) {
+    final seconds = int.tryParse(res.headers['retry-after'] ?? '');
+    return ApiException(res.statusCode, res.body,
+        retryAfter: seconds == null ? null : Duration(seconds: seconds));
+  }
+
   dynamic _decode(http.Response res) {
-    if (res.statusCode >= 400) throw ApiException(res.statusCode, res.body);
+    if (res.statusCode >= 400) throw _exception(res);
     if (res.body.isEmpty) return null;
     return jsonDecode(res.body);
   }

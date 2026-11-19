@@ -22,7 +22,7 @@ class AuthService {
   static Future<void> initialize() {
     return Supabase.initialize(
       url: Env.supabaseUrl,
-      anonKey: Env.supabaseAnonKey,
+      publishableKey: Env.supabaseAnonKey,
     );
   }
 

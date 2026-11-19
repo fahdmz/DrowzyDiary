@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../models/chat_message.dart';
 import 'api_client.dart';
 
@@ -35,9 +37,40 @@ class SendMessageResult {
 /// service never decides what to say next, it just relays the backend's
 /// question order and the rule-based crisis reply when it fires.
 class ChatService {
-  ChatService(this._api);
+  ChatService(
+    this._api, {
+    Random? random,
+    Future<void> Function(Duration)? delay,
+  })  : _random = random ?? Random.secure(),
+        _delay = delay ?? Future<void>.delayed;
 
   final ApiClient _api;
+  final Random _random;
+  final Future<void> Function(Duration) _delay;
+
+  static const _defaultRetryAfter = Duration(seconds: 2);
+  static const _maxRetryAfter = Duration(seconds: 5);
+
+  /// Mirrors SendMessageRequest.text max_length in backend/app/schemas/chat.py.
+  static const maxMessageLength = 2000;
+
+  // Mirrors backend defaults AZURE_AI_FOUNDRY_TIMEOUT_SECONDS and
+  // AZURE_AI_FOUNDRY_MAX_RETRIES. A turn makes up to two sequential Foundry
+  // calls (emotion fallback, then chat reply), each with 1 + retries attempts.
+  static const _foundryTimeoutSeconds = 30;
+  static const _foundryMaxRetries = 2;
+  static const _foundryCallsPerTurn = 2;
+  static const _slackSeconds = 30;
+  static const sendMessageTimeout = Duration(
+      seconds: _foundryCallsPerTurn *
+              _foundryTimeoutSeconds *
+              (_foundryMaxRetries + 1) +
+          _slackSeconds);
+
+  /// The last message that wasn't confirmed by the server. Sending the same
+  /// text to the same session again reuses its Idempotency-Key, so the
+  /// backend replays the saved turn instead of creating a duplicate.
+  ({String sessionId, String text, String key})? _unconfirmed;
 
   Future<StartedSession> startSession({
     required String checkinMode,
@@ -66,11 +99,40 @@ class ChatService {
     required String text,
     required String language,
   }) async {
-    final json = await _api.post('/chat/message', body: {
-      'session_id': sessionId,
-      'text': text,
-      'language': language,
-    }) as Map<String, dynamic>;
+    final pending = _unconfirmed;
+    final key = pending != null &&
+            pending.sessionId == sessionId &&
+            pending.text == text
+        ? pending.key
+        : _newKey();
+    _unconfirmed = (sessionId: sessionId, text: text, key: key);
+
+    final clock = Stopwatch()..start();
+    Future<dynamic> post(Duration timeout) => _api.post('/chat/message',
+        body: {
+          'session_id': sessionId,
+          'text': text,
+          'language': language,
+        },
+        headers: {'Idempotency-Key': key},
+        timeout: timeout);
+
+    dynamic response;
+    try {
+      response = await post(sendMessageTimeout);
+    } on ApiException catch (e) {
+      // 409: the same key is still being processed server-side. Wait, then
+      // retry once with that key, inside the overall sendMessageTimeout.
+      if (e.statusCode != 409) rethrow;
+      var wait = e.retryAfter ?? _defaultRetryAfter;
+      if (wait > _maxRetryAfter) wait = _maxRetryAfter;
+      final remaining = sendMessageTimeout - clock.elapsed - wait;
+      if (remaining <= Duration.zero) rethrow;
+      await _delay(wait);
+      response = await post(remaining);
+    }
+    final json = response as Map<String, dynamic>;
+    if (_unconfirmed?.key == key) _unconfirmed = null;
     return SendMessageResult(
       userMessage: _messageFromJson(json['user_message'] as Map<String, dynamic>),
       aiMessage: _messageFromJson(json['ai_message'] as Map<String, dynamic>),
@@ -81,6 +143,10 @@ class ChatService {
   Future<void> endSessionEarly(String sessionId) {
     return _api.post('/chat/$sessionId/end');
   }
+
+  String _newKey() => List.generate(
+          16, (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'))
+      .join();
 
   ChatMessage _messageFromJson(Map<String, dynamic> json) {
     return ChatMessage(
