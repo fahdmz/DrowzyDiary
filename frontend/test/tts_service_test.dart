@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show FunctionException, FunctionResponse;
 
 import 'package:drowzydiary/services/tts_service.dart';
 
@@ -56,7 +58,71 @@ class _FakeSystemTts implements SystemTts {
   }
 }
 
+class _ThrowingSystemTts extends _FakeSystemTts {
+  @override
+  Future<void> speak(String text, {required String languageCode}) async {
+    throw TtsException('engine unavailable');
+  }
+}
+
 void main() {
+  group('invokeGoogleTts', () {
+    test('sends the session access token as the Bearer token', () async {
+      Map<String, String>? sentHeaders;
+      Map<String, dynamic>? sentBody;
+      final result = await invokeGoogleTts(
+        accessToken: 'session-jwt',
+        send: (headers, body) async {
+          sentHeaders = headers;
+          sentBody = body;
+          return const FunctionResponse(
+              data: {'audioContent': 'abc'}, status: 200);
+        },
+        text: 'hi',
+        languageCode: 'en-US',
+      );
+
+      expect(sentHeaders, {'Authorization': 'Bearer session-jwt'});
+      expect(sentBody, {'text': 'hi', 'languageCode': 'en-US'});
+      expect(result['audioContent'], 'abc');
+    });
+
+    test('does not call the function without a session', () async {
+      var called = false;
+      for (final token in [null, '']) {
+        await expectLater(
+          invokeGoogleTts(
+            accessToken: token,
+            send: (headers, body) async {
+              called = true;
+              return const FunctionResponse(status: 200);
+            },
+            text: 'hi',
+            languageCode: 'en-US',
+          ),
+          throwsA(isA<TtsException>()),
+        );
+      }
+      expect(called, isFalse);
+    });
+
+    test('throws TtsException with the server message on 401/429', () async {
+      for (final status in [401, 429]) {
+        await expectLater(
+          invokeGoogleTts(
+            accessToken: 't',
+            send: (headers, body) async => FunctionResponse(
+                data: {'error': 'nope $status'}, status: status),
+            text: 'hi',
+            languageCode: 'en-US',
+          ),
+          throwsA(isA<TtsException>()
+              .having((e) => e.message, 'message', 'nope $status')),
+        );
+      }
+    });
+  });
+
   group('TtsService.languageCodeFor', () {
     test('maps app language codes to BCP-47 codes', () {
       expect(TtsService.languageCodeFor('id'), 'id-ID');
@@ -154,6 +220,42 @@ void main() {
       expect(systemTts.speakCount, 1);
       expect(systemTts.lastText, 'hello');
       expect(systemTts.lastLanguageCode, 'en-US');
+    });
+
+    test('falls back quietly to system TTS on 401/429-style function errors',
+        () async {
+      for (final status in [401, 429]) {
+        final player = _FakePlayer();
+        final systemTts = _FakeSystemTts();
+        var calls = 0;
+        final service = TtsService(
+          player: player,
+          systemTts: systemTts,
+          invoker: ({required String text, required String languageCode}) {
+            calls++;
+            throw FunctionException(status: status, details: 'denied');
+          },
+        );
+
+        await service.speak('hello', appLanguage: 'en');
+
+        expect(calls, 1);
+        expect(player.playCount, 0);
+        expect(systemTts.speakCount, 1);
+        expect(systemTts.lastText, 'hello');
+      }
+    });
+
+    test('does not throw when both the function and system TTS fail', () async {
+      final service = TtsService(
+        player: _FakePlayer(),
+        systemTts: _ThrowingSystemTts(),
+        invoker: ({required String text, required String languageCode}) async {
+          throw TtsException('429');
+        },
+      );
+
+      await service.speak('hello', appLanguage: 'en');
     });
 
     test('falls back to system TTS when byte playback fails', () async {

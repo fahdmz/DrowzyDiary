@@ -87,10 +87,35 @@ typedef TtsInvoker = Future<Map<String, dynamic>> Function({
 Future<Map<String, dynamic>> _defaultInvoker({
   required String text,
   required String languageCode,
+}) {
+  final client = Supabase.instance.client;
+  return invokeGoogleTts(
+    accessToken: client.auth.currentSession?.accessToken,
+    send: (headers, body) =>
+        client.functions.invoke('google-tts', headers: headers, body: body),
+    text: text,
+    languageCode: languageCode,
+  );
+}
+
+/// Calls the function with the signed-in user's session access token. With
+/// no session it throws instead of letting the client fall back to the
+/// public anon key, which the function rejects.
+@visibleForTesting
+Future<Map<String, dynamic>> invokeGoogleTts({
+  required String? accessToken,
+  required Future<FunctionResponse> Function(
+          Map<String, String> headers, Map<String, dynamic> body)
+      send,
+  required String text,
+  required String languageCode,
 }) async {
-  final response = await Supabase.instance.client.functions.invoke(
-    'google-tts',
-    body: {'text': text, 'languageCode': languageCode},
+  if (accessToken == null || accessToken.isEmpty) {
+    throw TtsException('No signed-in session for google-tts');
+  }
+  final response = await send(
+    {'Authorization': 'Bearer $accessToken'},
+    {'text': text, 'languageCode': languageCode},
   );
   final data = response.data;
   if (response.status < 200 || response.status >= 300) {
@@ -149,8 +174,12 @@ class TtsService {
 
   Future<void> speak(String text, {required String appLanguage}) async {
     final generation = ++_generation;
-    await _player.stop();
-    await _systemTts.stop();
+    try {
+      await _player.stop();
+      await _systemTts.stop();
+    } catch (_) {
+      // Best-effort: TTS must never break the chat turn itself.
+    }
     if (text.trim().isEmpty) return;
 
     final Map<String, dynamic> data;

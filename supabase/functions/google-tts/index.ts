@@ -1,10 +1,10 @@
 // Supabase Edge Function: synthesizes AI chat replies into speech via
 // Google Cloud Text-to-Speech, so the Google service-account credential
-// never has to live in the Flutter app. Authentication is enforced by the
-// platform (`verify_jwt = true` in supabase/config.toml) before this code
-// ever runs — a request without a valid Supabase user access token gets a
-// 401 automatically. See https://supabase.com/docs/guides/functions/auth.
+// never has to live in the Flutter app. `verify_jwt = true` only checks the
+// JWT signature (the public anon key passes), so this code also resolves the
+// token to a signed-in user and applies a per-user rate limit.
 import { GoogleAuth } from "npm:google-auth-library@10.9.0";
+import { createClient } from "npm:@supabase/supabase-js@2.49.4";
 
 import {
   SYNTHESIZE_URL,
@@ -14,6 +14,14 @@ import {
   InvalidTtsRequestError,
   GoogleTtsResponseError,
 } from "./request.ts";
+import {
+  RATE_LIMIT_MAX_REQUESTS,
+  RATE_LIMIT_WINDOW_SECONDS,
+  RateLimitResponseError,
+  extractBearerToken,
+  resolveAuthenticatedUser,
+  decideRateLimit,
+} from "./access.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -37,6 +45,13 @@ function jsonResponse(body: unknown, init: ResponseInit = {}) {
 // start, not per request — neither ever leaves this server-side function.
 const credentialsJson = Deno.env.get("GOOGLE_TTS_CREDENTIALS");
 const voiceOverride = Deno.env.get("GOOGLE_TTS_VOICE_ID");
+
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected by the platform.
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { auth: { persistSession: false, autoRefreshToken: false } },
+);
 
 let cachedAuth: GoogleAuth | null = null;
 
@@ -67,6 +82,35 @@ Deno.serve(async (req) => {
   }
   if (req.method !== "POST") {
     return jsonResponse({ error: "Method not allowed" }, { status: 405 });
+  }
+
+  const token = extractBearerToken(req.headers.get("Authorization"));
+  const user = token ? resolveAuthenticatedUser(await supabase.auth.getUser(token)) : null;
+  if (!user) {
+    return jsonResponse({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("consume_tts_rate_limit", {
+      p_user_id: user.userId,
+      p_limit: RATE_LIMIT_MAX_REQUESTS,
+      p_window_seconds: RATE_LIMIT_WINDOW_SECONDS,
+    });
+    if (error) throw error;
+    const decision = decideRateLimit(data);
+    if (!decision.allowed) {
+      return jsonResponse(
+        { error: "Too many requests" },
+        { status: 429, headers: { "Retry-After": String(decision.retryAfterSeconds) } },
+      );
+    }
+  } catch (error) {
+    if (!(error instanceof RateLimitResponseError)) {
+      console.error("Rate limit check failed", error);
+    } else {
+      console.error(error.message);
+    }
+    return jsonResponse({ error: "Internal error" }, { status: 500 });
   }
 
   let payload: unknown;
