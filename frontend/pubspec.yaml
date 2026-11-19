@@ -1,5 +1,5 @@
 name: drowzydiary
-description: DrowzyDiary — a quiet place to wind down. Voice-first sleep check-ins.
+description: DrowzyDiary — a quiet place to wind down. Sleep check-ins.
 publish_to: "none"
 version: 0.1.0
 
@@ -17,9 +17,6 @@ dependencies:
   http: ^1.2.0
   flutter_svg: ^2.0.10
   flutter_dotenv: ^5.2.1
-  audioplayers: ^6.8.1
-  speech_to_text: ^7.4.0
-  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_test:

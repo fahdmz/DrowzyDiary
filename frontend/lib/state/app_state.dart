@@ -15,8 +15,6 @@ import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/profile_service.dart';
 import '../services/recap_service.dart';
-import '../services/stt_service.dart';
-import '../services/tts_service.dart';
 import '../theme/palette.dart';
 
 enum AppScreen { auth, home, chat }
@@ -27,11 +25,7 @@ enum HomeTab { recap, checkin, profile }
 
 enum CheckinMode { night, morning }
 
-enum InputMode { stt, tts }
-
 enum RecapFilter { all, night, morning }
-
-enum MicPermStatus { unasked, granted, denied }
 
 const _connectionErrorText =
     "Sorry, I'm having trouble connecting right now. Please try again.";
@@ -56,8 +50,6 @@ class AppState extends ChangeNotifier {
     ChatService? chatService,
     RecapService? recapService,
     ProfileService? profileService,
-    TtsService? ttsService,
-    SttService? sttService,
   })  : _authService = authService ?? AuthService.instance(),
         _chatService = chatService ??
             ChatService(
@@ -67,9 +59,7 @@ class AppState extends ChangeNotifier {
                 apiClient ?? ApiClient(authService ?? AuthService.instance())),
         _profileService = profileService ??
             ProfileService(
-                apiClient ?? ApiClient(authService ?? AuthService.instance())),
-        _ttsService = ttsService ?? TtsService(),
-        _sttService = sttService ?? SttService() {
+                apiClient ?? ApiClient(authService ?? AuthService.instance())) {
     _bootstrap();
     // Google OAuth completes via an external browser + deep-link redirect,
     // not a value we can await directly — this is what actually moves us
@@ -91,8 +81,6 @@ class AppState extends ChangeNotifier {
   final ChatService _chatService;
   final RecapService _recapService;
   final ProfileService _profileService;
-  final TtsService _ttsService;
-  final SttService _sttService;
   StreamSubscription<AuthState>? _authSub;
   bool _signingOut = false;
 
@@ -107,8 +95,6 @@ class AppState extends ChangeNotifier {
 
   final List<ChatMessage> messages = [];
   String draft = '';
-  InputMode inputMode = InputMode.stt;
-  bool isRecording = false;
   bool aiTyping = false;
   // Bubble (and its trailing error notice) of a send that failed; resending
   // the same text reuses it, matching ChatService reusing the idempotency key.
@@ -116,9 +102,6 @@ class AppState extends ChangeNotifier {
   ChatMessage? _unconfirmedError;
   String? _currentSessionId;
   bool checkinCompleted = false;
-
-  MicPermStatus micPermStatus = MicPermStatus.unasked;
-  bool showMicPermModal = false;
 
   bool bedtimeMode = false;
   String quietHoursStart = '22:00';
@@ -316,16 +299,12 @@ class AppState extends ChangeNotifier {
   Future<void> exitChat() async {
     screen = AppScreen.home;
     activeTab = HomeTab.checkin;
-    await _sttService.cancel();
-    isRecording = false;
     aiTyping = false;
-    await _ttsService.stop();
     notifyListeners();
     await loadRecaps();
   }
 
   Future<void> logOut() async {
-    await _ttsService.stop();
     _signingOut = true;
     try {
       await _authService.signOut();
@@ -356,39 +335,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleInputMode() {
-    inputMode = inputMode == InputMode.stt ? InputMode.tts : InputMode.stt;
-    notifyListeners();
-    if (inputMode == InputMode.tts) {
-      // Turning voice replies on reads the latest AI reply immediately,
-      // then every new one as it arrives (see sendMessage).
-      final lastAiMessage = messages.lastWhere(
-        (m) => m.sender == MessageSender.ai,
-        orElse: () => const ChatMessage(id: '', sender: MessageSender.ai),
-      );
-      _speak(lastAiMessage);
-    } else {
-      unawaited(_ttsService.stop());
-    }
-  }
-
-  /// Speaks an AI message aloud if voice replies are on. Never called with
-  /// the user's own messages.
-  void _speak(ChatMessage message) {
-    if (inputMode != InputMode.tts) return;
-    final text = _spokenTextFor(message);
-    if (text == null) return;
-    unawaited(_ttsService.speak(text, appLanguage: lang.name));
-  }
-
   Future<void> sendMessage([String? overrideText]) async {
-    if (isRecording) {
-      // Manually sending (e.g. tapping the arrow that a live partial STT
-      // result turned into) must stop the still-listening recognizer, or a
-      // late final result would silently send a second message.
-      unawaited(_sttService.cancel());
-      isRecording = false;
-    }
     final text = (overrideText ?? draft).trim();
     // Today's already-completed check-ins render read-only (see ChatScreen,
     // which hides the input row entirely for these) — no input reaches here.
@@ -425,7 +372,6 @@ class AppState extends ChangeNotifier {
           sessionId: sessionId, text: text, language: lang.name);
       _unconfirmedBubble = null;
       messages.add(result.aiMessage);
-      _speak(result.aiMessage);
       _refreshStatsAfterChatTurn(sessionCompleted: result.sessionCompleted);
       if (result.sessionCompleted) checkinCompleted = true;
     } catch (e) {
@@ -456,68 +402,6 @@ class AppState extends ChangeNotifier {
       loadSleepFactors(),
       if (sessionCompleted) loadRecaps(),
     ]));
-  }
-
-  void startVoiceInput() {
-    if (draft.trim().isNotEmpty) {
-      sendMessage();
-      return;
-    }
-    if (isRecording) {
-      // Tapping the mic again while it's listening ends the recording early
-      // and sends whatever was recognized so far.
-      _sttService.stop();
-      return;
-    }
-    if (micPermStatus == MicPermStatus.unasked) {
-      showMicPermModal = true;
-      notifyListeners();
-      return;
-    }
-    if (micPermStatus == MicPermStatus.denied) return;
-    _beginRecording();
-  }
-
-  void _beginRecording() {
-    isRecording = true;
-    notifyListeners();
-    _sttService.startListening(
-      appLanguage: lang.name,
-      onPartialResult: (text) {
-        draft = text;
-        notifyListeners();
-      },
-      onFinalResult: (text) {
-        isRecording = false;
-        draft = '';
-        notifyListeners();
-        if (text.trim().isNotEmpty) sendMessage(text);
-      },
-      onDone: () {
-        // Fallback for when recognition stops without ever delivering a
-        // final result (e.g. a permission/engine error) so the mic button
-        // doesn't get stuck showing "listening".
-        if (isRecording) {
-          isRecording = false;
-          notifyListeners();
-        }
-      },
-    );
-  }
-
-  Future<void> allowMicPerm() async {
-    showMicPermModal = false;
-    notifyListeners();
-    final granted = await _sttService.requestPermission();
-    micPermStatus = granted ? MicPermStatus.granted : MicPermStatus.denied;
-    notifyListeners();
-    if (granted) _beginRecording();
-  }
-
-  void denyMicPerm() {
-    micPermStatus = MicPermStatus.denied;
-    showMicPermModal = false;
-    notifyListeners();
   }
 
   // --- recap ------------------------------------------------------------
@@ -866,28 +750,10 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
-    unawaited(_sttService.cancel());
     _notifTimer?.cancel();
     _authSub?.cancel();
-    unawaited(_ttsService.dispose());
     super.dispose();
   }
-}
-
-/// Text to actually speak for a chat message: its own text, or — for a
-/// crisis message, whose text is intentionally split into
-/// prefix/phone/suffix for the tappable phone link — those parts joined
-/// back together, since that guidance matters at least as much read aloud.
-String? _spokenTextFor(ChatMessage message) {
-  final text = message.text;
-  if (text != null && text.trim().isNotEmpty) return text;
-  if (!message.isCrisis) return null;
-  final parts = [
-    message.crisisPrefix,
-    message.crisisPhone,
-    message.crisisSuffix
-  ].where((part) => part != null && part.trim().isNotEmpty).join(' ');
-  return parts.isEmpty ? null : parts;
 }
 
 /// "22:00" -> "10:00 PM", "07:00" -> "7:00 AM".

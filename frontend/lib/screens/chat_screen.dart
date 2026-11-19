@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../services/chat_service.dart';
 import '../state/app_state.dart';
 import '../widgets/chat_bubble.dart';
-import '../widgets/mic_permission_modal.dart';
 import '../widgets/typing_indicator.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -55,9 +54,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 500),
       color: palette.bg,
-      child: Stack(
-        children: [
-          Column(
+      child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
@@ -124,36 +121,11 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 26),
               child: Column(
                 children: [
-                  if (app.isRecording) ...[
-                    Text(t.listening, style: TextStyle(fontSize: 12.5, color: palette.sub)),
-                    const SizedBox(height: 10),
-                  ],
-                  Text(
-                    app.inputMode == InputMode.stt ? t.voiceInputCaption : t.aiVoiceCaption,
-                    style: TextStyle(fontSize: 10.5, color: palette.sub),
-                  ),
-                  const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(color: palette.card, borderRadius: BorderRadius.circular(100)),
                     child: Row(
                       children: [
-                        GestureDetector(
-                          onTap: app.toggleInputMode,
-                          child: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: app.inputMode == InputMode.tts ? palette.accent : Colors.transparent,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              app.inputMode == InputMode.tts ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                              size: 18,
-                              color: app.inputMode == InputMode.tts ? Colors.white : palette.sub,
-                            ),
-                          ),
-                        ),
                         Expanded(
                           child: TextField(
                             controller: _draftController,
@@ -168,7 +140,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                     : null,
                             style: TextStyle(fontSize: 14.5, color: palette.text),
                             decoration: InputDecoration(
-                              hintText: t.typeOrSpeak,
+                              hintText: t.typeMessage,
                               hintStyle: TextStyle(color: palette.sub),
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -176,7 +148,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         ),
                         GestureDetector(
-                          onTap: app.draft.trim().isNotEmpty ? () => app.sendMessage() : app.startVoiceInput,
+                          onTap: app.draft.trim().isNotEmpty ? () => app.sendMessage() : null,
                           child: Container(
                             width: 38,
                             height: 38,
@@ -185,8 +157,8 @@ class _ChatScreenState extends State<ChatScreen> {
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              app.draft.trim().isNotEmpty ? Icons.arrow_upward_rounded : Icons.mic_rounded,
-                              size: app.draft.trim().isNotEmpty ? 18 : 16,
+                              Icons.arrow_upward_rounded,
+                              size: 18,
                               color: app.draft.trim().isNotEmpty ? Colors.white : palette.sub,
                             ),
                           ),
@@ -195,17 +167,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                 ],
-              ),
-            ),
-        ],
-          ),
-          if (app.showMicPermModal)
-            Positioned.fill(
-              child: MicPermissionModal(
-                palette: palette,
-                t: t,
-                onAllow: app.allowMicPerm,
-                onDeny: app.denyMicPerm,
               ),
             ),
         ],

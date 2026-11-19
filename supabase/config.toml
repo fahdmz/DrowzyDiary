@@ -1,13 +1,3 @@
-# Minimal Supabase CLI config to support local development/deploy of the
-# google-tts Edge Function. This project uses a hosted Supabase project for
-# everything else (auth, database) — this file does not need to enable the
-# full local stack (db/studio/etc.) just to work with functions.
+# Minimal Supabase CLI config. This project uses a hosted Supabase project
+# for everything (auth, database); the local stack is not enabled.
 project_id = "pillowtalk"
-
-[functions.google-tts]
-# Supabase's docs disagree on whether the gateway check works with the new
-# API keys / asymmetric signing keys, and it only checks the token's
-# signature anyway (a publishable key or anon JWT would pass). index.ts
-# already requires a real signed-in user via auth.getUser and rate-limits
-# them, so security does not depend on the gateway check.
-verify_jwt = false
