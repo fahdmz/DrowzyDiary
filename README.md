@@ -115,8 +115,9 @@ flutter run -d chrome --web-port=8080
 
 `API_BASE_URL` in `.env` defaults to `http://localhost:8000`. If you're
 running in Chrome, keep `--web-port=8080` — it has to match one of the
-origins in the backend's `ALLOWED_ORIGINS`, or every request will get
-blocked by CORS. Running on a simulator or physical device instead doesn't
+origins in the backend's `ALLOWED_ORIGINS` (default:
+`http://localhost:8080`; set it explicitly in `.env` for any other origin),
+or every request will get blocked by CORS. Running on a simulator or physical device instead doesn't
 have that restriction.
 
 Google sign-in works out of the box in the sense that the OAuth flow is
