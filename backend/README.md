@@ -23,7 +23,9 @@ pip install -r requirements-dev.txt
 cp .env.example .env
 ```
 
-Fill in the Supabase URL and backend service-role key. In the Supabase
+Fill in the Supabase URL and the secret key (`SUPABASE_SECRET_KEY`,
+`sb_secret_...`, from Project Settings > API Keys; the legacy
+`SUPABASE_SERVICE_ROLE_KEY` name still works as a fallback). In the Supabase
 dashboard, make sure Authentication uses an asymmetric signing key (ES256 or
 RS256). The JWKS URL is derived automatically from `SUPABASE_URL`.
 

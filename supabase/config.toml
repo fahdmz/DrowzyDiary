@@ -5,6 +5,9 @@
 project_id = "pillowtalk"
 
 [functions.google-tts]
-# The platform only checks the JWT signature, which the public anon key also
-# passes. The function itself requires a signed-in user and rate-limits them.
-verify_jwt = true
+# Supabase's docs disagree on whether the gateway check works with the new
+# API keys / asymmetric signing keys, and it only checks the token's
+# signature anyway (a publishable key or anon JWT would pass). index.ts
+# already requires a real signed-in user via auth.getUser and rate-limits
+# them, so security does not depend on the gateway check.
+verify_jwt = false

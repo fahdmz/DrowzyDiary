@@ -16,10 +16,11 @@ flutter run -d chrome --web-port=8080
 
 `.env` is loaded at startup via `flutter_dotenv` (see `main.dart` and
 `lib/services/env.dart`) — no more `--dart-define` flags needed. It's
-gitignored, same as the backend's. `SUPABASE_URL`/`SUPABASE_ANON_KEY` are
-the same Supabase project the backend points at (Settings > API in the
-Supabase dashboard — this is the public anon key, not the backend's
-service-role key). `API_BASE_URL` defaults to `http://localhost:8000` if
+gitignored, same as the backend's. `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` are
+the same Supabase project the backend points at (Project Settings > API
+Keys in the Supabase dashboard — this is the public `sb_publishable_` key,
+not the backend's secret key; the legacy `SUPABASE_ANON_KEY` name still
+works as a fallback). `API_BASE_URL` defaults to `http://localhost:8000` if
 omitted.
 
 The `--web-port=8080` matters if you're running in Chrome: it has to match

@@ -35,3 +35,25 @@ def test_invalid_jwks_cache_seconds_fails_fast(
 
     with pytest.raises(RuntimeError):
         Settings()
+
+
+def test_secret_key_is_preferred_over_legacy_service_role_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://project-ref.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_new")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "legacy-key")
+
+    assert Settings().supabase_secret_key == "sb_secret_new"
+
+
+def test_legacy_service_role_key_is_used_as_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://project-ref.supabase.co")
+    monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "legacy-key")
+
+    settings = Settings()
+    settings.validate()
+    assert settings.supabase_secret_key == "legacy-key"

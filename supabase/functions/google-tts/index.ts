@@ -1,8 +1,9 @@
 // Supabase Edge Function: synthesizes AI chat replies into speech via
 // Google Cloud Text-to-Speech, so the Google service-account credential
-// never has to live in the Flutter app. `verify_jwt = true` only checks the
-// JWT signature (the public anon key passes), so this code also resolves the
-// token to a signed-in user and applies a per-user rate limit.
+// never has to live in the Flutter app. The gateway JWT check is disabled for
+// this function (see supabase/config.toml), so this code is the only gate: it
+// resolves the bearer token to a signed-in user and applies a per-user rate
+// limit.
 import { GoogleAuth } from "npm:google-auth-library@10.9.0";
 import { createClient } from "npm:@supabase/supabase-js@2.49.4";
 
@@ -46,10 +47,24 @@ function jsonResponse(body: unknown, init: ResponseInit = {}) {
 const credentialsJson = Deno.env.get("GOOGLE_TTS_CREDENTIALS");
 const voiceOverride = Deno.env.get("GOOGLE_TTS_VOICE_ID");
 
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected by the platform.
+// SUPABASE_URL and the secret key are injected by the platform. Projects with
+// the new API keys get SUPABASE_SECRET_KEYS (a JSON object; the key created
+// by default is named "default"); older projects get the plain
+// SUPABASE_SERVICE_ROLE_KEY string.
+function getSecretKey(): string {
+  const keys = Deno.env.get("SUPABASE_SECRET_KEYS");
+  if (keys) {
+    const key = JSON.parse(keys)["default"];
+    if (typeof key === "string" && key.length > 0) return key;
+  }
+  const legacy = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (legacy) return legacy;
+  throw new Error("No Supabase secret key is configured");
+}
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  getSecretKey(),
   { auth: { persistSession: false, autoRefreshToken: false } },
 );
 
