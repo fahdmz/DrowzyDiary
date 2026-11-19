@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../services/chat_service.dart';
 import '../state/app_state.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/mic_permission_modal.dart';
@@ -159,6 +160,12 @@ class _ChatScreenState extends State<ChatScreen> {
                             onChanged: app.updateDraft,
                             onSubmitted: (_) => app.sendMessage(),
                             textInputAction: TextInputAction.send,
+                            maxLength: ChatService.maxMessageLength,
+                            buildCounter: (context, {required currentLength, required isFocused, maxLength}) =>
+                                currentLength > ChatService.maxMessageLength - 200
+                                    ? Text('$currentLength/$maxLength',
+                                        style: TextStyle(fontSize: 11, color: palette.sub))
+                                    : null,
                             style: TextStyle(fontSize: 14.5, color: palette.text),
                             decoration: InputDecoration(
                               hintText: t.typeOrSpeak,

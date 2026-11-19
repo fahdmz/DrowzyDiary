@@ -41,7 +41,7 @@ class DeleteConfirmModal extends StatelessWidget {
                 width: 46,
                 height: 46,
                 margin: const EdgeInsets.only(bottom: 6),
-                decoration: BoxDecoration(color: _danger.withOpacity(0.15), borderRadius: BorderRadius.circular(14)),
+                decoration: BoxDecoration(color: _danger.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(14)),
                 child: const Icon(Icons.delete_outline, color: _danger, size: 19),
               ),
               Text(
