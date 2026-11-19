@@ -6,6 +6,7 @@ class FakeSettings:
     chat_memory_session_limit = 3
     chat_memory_lookback_days = 14
     chat_max_output_tokens = 800
+    chat_max_user_turns = 8
     chat_rate_limit_requests = 20
     chat_rate_limit_window_seconds = 60
     azure_ai_foundry_endpoint = "https://resource.services.ai.azure.com"

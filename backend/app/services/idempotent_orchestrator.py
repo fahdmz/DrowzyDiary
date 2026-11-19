@@ -1,5 +1,6 @@
 """Durable idempotency wrapper around the protected chat orchestrator."""
 
+import asyncio
 from typing import Any
 
 from app.schemas.analysis import AnalysisResult, AnalysisSource, Emotion, RiskLevel
@@ -20,13 +21,15 @@ class IdempotentChatOrchestrator:
 
         session_id = kwargs["session_id"]
         user_id = kwargs["user_id"]
-        session = self.repository.get_owned_session(session_id, user_id)
+        session = await asyncio.to_thread(self.repository.get_owned_session, session_id, user_id)
         if session is None:
             raise SessionNotFoundError("Session not found")
         if session["status"] == "completed":
             raise SessionCompletedError("This check-in has already ended")
 
-        existing = self.repository.find_idempotent_turn(session_id, idempotency_key)
+        existing = await asyncio.to_thread(
+            self.repository.find_idempotent_turn, session_id, idempotency_key
+        )
         if existing is not None:
             if existing["ai_message"] is None:
                 raise IdempotencyPending()
@@ -37,7 +40,8 @@ class IdempotentChatOrchestrator:
 
         if self.inner.rate_limiter is not None:
             self.inner.rate_limiter.check(user_id)
-        reserved = self.repository.reserve_idempotency_key(
+        reserved = await asyncio.to_thread(
+            self.repository.reserve_idempotency_key,
             session_id, idempotency_key, text=kwargs["text"]
         )
         proxy = _ReservedTurnRepository(self.repository, reserved)

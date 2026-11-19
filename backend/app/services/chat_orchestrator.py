@@ -71,27 +71,37 @@ class ChatOrchestrator:
     ) -> ChatTurnResult:
         if self.rate_limiter is not None:
             self.rate_limiter.check(user_id)
-        session = self.repository.get_owned_session(session_id, user_id)
+        session = await asyncio.to_thread(self.repository.get_owned_session, session_id, user_id)
         if session is None:
             raise SessionNotFoundError("Session not found")
         if session["status"] == "completed":
             raise SessionCompletedError("This check-in has already ended")
 
-        user_message = self.repository.insert_message(session_id, "user", text)
+        user_message = await asyncio.to_thread(
+            self.repository.insert_message, session_id, "user", text
+        )
         safety = self.safety_screen.screen(text)
         if safety.should_interrupt:
             analysis = _safety_analysis(safety.risk_level)
-            self.repository.save_analysis(user_message["id"], session_id, analysis)
-            self.repository.save_safety_event(user_message["id"], session_id, safety)
-            self.repository.mark_session_crisis(session_id)
+            await asyncio.to_thread(
+                self.repository.save_analysis, user_message["id"], session_id, analysis
+            )
+            await asyncio.to_thread(
+                self.repository.save_safety_event, user_message["id"], session_id, safety
+            )
+            await asyncio.to_thread(self.repository.mark_session_crisis, session_id)
             safety_message = build_safety_message(
                 language="id" if language == "id" else "en",
                 resource_name=self.resource_name,
                 resource_phone=self.resource_phone,
                 resource_url=self.resource_url,
             )
-            ai_message = self.repository.insert_message(
-                session_id, "ai", safety_message.text, is_crisis=True
+            ai_message = await asyncio.to_thread(
+                self.repository.insert_message,
+                session_id,
+                "ai",
+                safety_message.text,
+                is_crisis=True,
             )
             return ChatTurnResult(
                 user_message=user_message,
@@ -103,17 +113,22 @@ class ChatOrchestrator:
         analysis = await self.analyzer.analyze(text)
         if safety.risk_level is not RiskLevel.NONE:
             analysis = analysis.model_copy(update={"risk_level": safety.risk_level})
-        self.repository.save_analysis(user_message["id"], session_id, analysis)
+        await asyncio.to_thread(
+            self.repository.save_analysis, user_message["id"], session_id, analysis
+        )
         save_factors = getattr(self.repository, "save_factor_occurrences", None)
         if callable(save_factors):
-            save_factors(
+            await asyncio.to_thread(
+                save_factors,
                 user_id=user_id,
                 session_id=session_id,
                 message_id=user_message["id"],
                 checkin_mode=session["checkin_mode"],
                 analysis=analysis,
             )
-        context = self.repository.load_chat_context(user_id, session_id)
+        context = await asyncio.to_thread(
+            self.repository.load_chat_context, user_id, session_id
+        )
 
         try:
             reply = await self.chatbot.respond(
@@ -127,18 +142,20 @@ class ChatOrchestrator:
             logger.exception("Chat model unavailable; returning controlled reply")
             reply = ChatbotReply(text=_upstream_failure_reply(language), should_close=False)
 
-        ai_message = self.repository.insert_message(session_id, "ai", reply.text)
+        ai_message = await asyncio.to_thread(
+            self.repository.insert_message, session_id, "ai", reply.text
+        )
 
-        user_turns = self.repository.count_user_messages(session_id)
+        user_turns = await asyncio.to_thread(self.repository.count_user_messages, session_id)
         hit_cap = user_turns >= self.max_user_turns
         ai_wants_close = reply.should_close and user_turns >= _MIN_USER_TURNS_BEFORE_AI_CLOSE
         session_status = session["status"]
         if hit_cap or ai_wants_close:
-            self.repository.mark_session_completed(session_id)
+            await asyncio.to_thread(self.repository.mark_session_completed, session_id)
             session_status = "completed"
             if self.recap_service is not None:
-                asyncio.create_task(
-                    _generate_recap_best_effort(self.recap_service, user_id, session_id)
+                spawn_background(
+                    generate_recap_best_effort(self.recap_service, user_id, session_id)
                 )
 
         return ChatTurnResult(
@@ -149,9 +166,27 @@ class ChatOrchestrator:
         )
 
 
-async def _generate_recap_best_effort(recap_service: Any, user_id: str, session_id: str) -> None:
+# The event loop only keeps weak references to tasks, so un-referenced
+# fire-and-forget tasks can be garbage-collected before they finish.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _on_background_done(task: asyncio.Task) -> None:
+    _background_tasks.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        logger.error("Background task failed", exc_info=task.exception())
+
+
+def spawn_background(coro: Any) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_on_background_done)
+    return task
+
+
+async def generate_recap_best_effort(recap_service: Any, user_id: str, session_id: str) -> None:
     """Fire-and-forget so ending a check-in never makes the user wait on an
-    AI recap call — same pattern as the day-rollover finalization."""
+    AI recap call — also used for the day-rollover finalization."""
     try:
         await recap_service.generate_for_session(user_id=user_id, session_id=session_id)
     except Exception:

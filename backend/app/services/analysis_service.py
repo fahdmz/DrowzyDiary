@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from app.schemas.analysis import AnalysisResult, AnalysisSource, Emotion, RiskLevel
@@ -10,6 +12,9 @@ from app.services.analysis_normalizer import extract_context
 from app.services.classifier import LocalEmotionPrediction, MissingMLDependenciesError
 
 logger = logging.getLogger(__name__)
+
+# One worker: local inference is serialized, so the model is never called concurrently.
+_LOCAL_INFERENCE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="local-classifier")
 
 
 class MessageAnalyzer:
@@ -29,7 +34,9 @@ class MessageAnalyzer:
     async def analyze(self, text: str) -> AnalysisResult:
         extracted = extract_context(text)
         try:
-            local = self.local_classifier.classify(text)
+            local = await asyncio.get_running_loop().run_in_executor(
+                _LOCAL_INFERENCE_EXECUTOR, self.local_classifier.classify, text
+            )
         except MissingMLDependenciesError as exc:
             logger.warning(
                 "%s Falling back to Foundry/rules classification.",

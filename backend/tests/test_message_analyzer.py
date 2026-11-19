@@ -132,3 +132,46 @@ def test_unmapped_local_prediction_without_fallback_returns_neutral_rules_result
     assert result.emotion is Emotion.NEUTRAL
     assert result.source is AnalysisSource.RULES
     assert result.model_id is None
+
+
+def test_slow_local_classifier_does_not_block_the_event_loop():
+    import threading
+    import time
+
+    class SlowClassifier(FakeLocalClassifier):
+        def classify(self, text):
+            self.thread = threading.current_thread()
+            time.sleep(0.3)
+            return super().classify(text)
+
+    classifier = SlowClassifier(
+        LocalEmotionPrediction(
+            emotion=Emotion.SADNESS,
+            confidence=0.9,
+            emotion_scores={"sadness": 0.9},
+            requires_fallback=False,
+        )
+    )
+    analyzer = MessageAnalyzer(
+        local_classifier=classifier, fallback_classifier=None, fallback_enabled=False
+    )
+
+    async def scenario():
+        ticks = 0
+
+        async def ticker():
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        task = asyncio.create_task(ticker())
+        result = await analyzer.analyze("Aku sedih")
+        task.cancel()
+        return result, ticks
+
+    result, ticks = asyncio.run(scenario())
+
+    assert result.emotion is Emotion.SADNESS
+    assert ticks >= 5
+    assert classifier.thread is not threading.main_thread()

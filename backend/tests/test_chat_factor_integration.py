@@ -8,6 +8,7 @@ from app.schemas.analysis import (
     RiskLevel,
 )
 from app.services.chat_orchestrator import ChatOrchestrator
+from app.services.foundry_chatbot import ChatbotReply
 from app.services.safety import SafetyScreen
 
 
@@ -27,6 +28,8 @@ class Repository:
     def save_analysis(self, message_id, session_id, analysis): pass
     def load_chat_context(self, user_id, session_id): return {}
     def save_factor_occurrences(self, **kwargs): self.factor_calls.append(kwargs)
+    def count_user_messages(self, session_id):
+        return sum(1 for m in self.messages if m["sender"] == "user")
 
 
 class Analyzer:
@@ -47,7 +50,8 @@ class Analyzer:
 
 
 class Chatbot:
-    async def respond(self, **kwargs): return "Aku mendengarkan"
+    async def respond(self, **kwargs):
+        return ChatbotReply(text="Aku mendengarkan", should_close=False)
 
 
 def test_normal_chat_turn_persists_factors_for_exact_user_message():

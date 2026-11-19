@@ -3,7 +3,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from postgrest.exceptions import APIError
 
 from ..deps import get_current_user_id
 from ..schemas.chat import (
@@ -18,6 +19,7 @@ from ..services.chat_orchestrator import (
     ChatOrchestrator,
     SessionCompletedError,
     SessionNotFoundError,
+    generate_recap_best_effort,
 )
 from ..services.checkin_flow import greeting_for
 from ..services.recap_factory import get_recap_service
@@ -26,6 +28,8 @@ from ..services.recap_service import RecapService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
+
+_UNIQUE_VIOLATION = "23505"
 
 
 def _get_supabase() -> Any:
@@ -80,12 +84,22 @@ def _insert_greeting(sb: Any, session: dict, payload: StartSessionRequest) -> di
     )
 
 
-async def _finalize_stale_session(
-    sb: Any, recap_service: RecapService, user_id: str, session_id: str
-) -> None:
-    """Closes out a session left open from a previous day. Runs as a
-    fire-and-forget background task so opening today's fresh check-in never
-    has to wait on an AI recap call for yesterday's."""
+def _find_active_session(sb: Any, user_id: str, checkin_mode: str) -> dict | None:
+    rows = (
+        sb.table("chat_sessions")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("checkin_mode", checkin_mode)
+        .eq("status", "active")
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    return rows[0] if rows else None
+
+
+def _complete_session(sb: Any, user_id: str, session_id: str) -> None:
     sb.table("chat_sessions").update(
         {
             "status": "completed",
@@ -93,50 +107,41 @@ async def _finalize_stale_session(
             "preview": _first_user_message_preview(sb, session_id),
         }
     ).eq("id", session_id).eq("user_id", user_id).execute()
-    try:
-        await recap_service.generate_for_session(user_id=user_id, session_id=session_id)
-    except RecapGenerationError:
-        logger.exception("Best-effort recap generation failed for stale session %s", session_id)
+
+
+def _resume_session(sb: Any, session: dict, payload: StartSessionRequest) -> StartSessionResponse:
+    messages = _load_messages(sb, session["id"])
+    if not messages:
+        messages = [_insert_greeting(sb, session, payload)]
+    return StartSessionResponse(
+        session_id=session["id"],
+        checkin_mode=payload.checkin_mode,
+        session_status=session["status"],
+        messages=[ChatMessageOut(**m) for m in messages],
+    )
 
 
 @router.post("/start", response_model=StartSessionResponse)
-async def start_session(
+def start_session(
     payload: StartSessionRequest,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user_id),
     recap_service: RecapService = Depends(get_recap_service),
 ):
     sb = _get_supabase()
     today_start = _start_of_today_utc(payload.timezone_offset_minutes)
 
-    active_rows = (
-        sb.table("chat_sessions")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("checkin_mode", payload.checkin_mode)
-        .eq("status", "active")
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-
-    if active_rows:
-        session = active_rows[0]
+    session = _find_active_session(sb, user_id, payload.checkin_mode)
+    if session is not None:
         if _parse_timestamp(session["started_at"]) >= today_start:
             # Still open from earlier today — resume it with full history.
-            messages = _load_messages(sb, session["id"])
-            if not messages:
-                messages = [_insert_greeting(sb, session, payload)]
-            return StartSessionResponse(
-                session_id=session["id"],
-                checkin_mode=payload.checkin_mode,
-                session_status=session["status"],
-                messages=[ChatMessageOut(**m) for m in messages],
-            )
-        # Left active from a previous day — close it out in the background
-        # and fall through to start a fresh session for today.
-        asyncio.create_task(
-            _finalize_stale_session(sb, recap_service, user_id, session["id"])
+            return _resume_session(sb, session, payload)
+        # Left active from a previous day: close it now, because the one-active-
+        # per-mode unique index would reject today's insert otherwise. Only the
+        # AI recap is deferred until after the response.
+        _complete_session(sb, user_id, session["id"])
+        background_tasks.add_task(
+            generate_recap_best_effort, recap_service, user_id, session["id"]
         )
     else:
         # No active session — see if today's check-in of this type already
@@ -163,12 +168,21 @@ async def start_session(
                 messages=[ChatMessageOut(**m) for m in messages],
             )
 
-    session = (
-        sb.table("chat_sessions")
-        .insert({"user_id": user_id, "checkin_mode": payload.checkin_mode})
-        .execute()
-        .data[0]
-    )
+    try:
+        session = (
+            sb.table("chat_sessions")
+            .insert({"user_id": user_id, "checkin_mode": payload.checkin_mode})
+            .execute()
+            .data[0]
+        )
+    except APIError as exc:
+        # A concurrent /chat/start won the race on the one-active-per-mode index.
+        if exc.code != _UNIQUE_VIOLATION:
+            raise
+        existing = _find_active_session(sb, user_id, payload.checkin_mode)
+        if existing is None:
+            raise
+        return _resume_session(sb, existing, payload)
     greeting_row = _insert_greeting(sb, session, payload)
     return StartSessionResponse(
         session_id=session["id"],
@@ -232,17 +246,11 @@ async def end_session_early(
     recap_service: RecapService = Depends(get_recap_service),
 ):
     sb = _get_supabase()
-    session = _get_owned_session(sb, session_id, user_id)
+    session = await asyncio.to_thread(_get_owned_session, sb, session_id, user_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     if session["status"] == "active":
-        sb.table("chat_sessions").update(
-            {
-                "status": "completed",
-                "ended_at": datetime.now(timezone.utc).isoformat(),
-                "preview": _first_user_message_preview(sb, session_id),
-            }
-        ).eq("id", session_id).eq("user_id", user_id).execute()
+        await asyncio.to_thread(_complete_session, sb, user_id, session_id)
 
     try:
         await recap_service.generate_for_session(
