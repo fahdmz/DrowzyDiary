@@ -1,0 +1,24 @@
+# Repo-wide safety net. Sub-project .gitignore files (backend/, frontend/,
+# supabase/functions/) add their own rules; these cover the root and any
+# folder that lacks one.
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Flutter / Dart / Android
+.dart_tool/
+.gradle/
+local.properties
+**/flutter/ephemeral/
+**/Flutter/ephemeral/
+
+# OS
+.DS_Store

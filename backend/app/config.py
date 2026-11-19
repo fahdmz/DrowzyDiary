@@ -122,7 +122,7 @@ class Settings:
             "CRISIS_RESOURCE_URL", "https://www.healing119.id"
         )
 
-        origins = os.getenv("ALLOWED_ORIGINS", "*")
+        origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:8080")
         self.allowed_origins = [
             origin.strip() for origin in origins.split(",") if origin.strip()
         ]
