@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A private, voice-first sleep diary and wind-down companion. The idea is
+A private sleep diary and wind-down companion. The idea is
 simple: give people a safe, bounded place to dump their worries before bed,
 and a quick check-in in the morning about how they slept. Over time those
 check-ins turn into a diary you can go back and correct, plus gentle,
@@ -35,8 +35,7 @@ backend/    FastAPI service — auth verification, check-in flow, crisis
             detection, sleep-factor analysis, recaps
 frontend/   Flutter app — auth, 3-tab home (Recap / Check-in / Profile),
             the night/morning check-in chat, recap detail view
-supabase/   Database schema lives in backend/sql, plus an edge function
-            for text-to-speech
+supabase/   Supabase CLI config (the database schema lives in backend/sql)
 ```
 
 `backend/` and `frontend/` are independent projects with their own
@@ -49,7 +48,6 @@ dependencies — there's no shared build step between them.
   targets are scaffolded too)
 - `provider` for state management
 - `supabase_flutter` for auth
-- `speech_to_text` and `flutter_tts` for voice input/output
 - `google_fonts`, `flutter_svg` for the UI
 
 **Backend**
@@ -68,10 +66,6 @@ dependencies — there's no shared build step between them.
   `user_id`
 - Tables: `profiles`, `chat_sessions`, `chat_messages`, `sleep_logs`,
   `sleep_factors`, `sleep_factor_occurrences`
-
-**Other**
-- A Supabase Edge Function (TypeScript/Deno) handles text-to-speech via
-  Google's API
 
 ## Running it locally
 
@@ -95,8 +89,7 @@ have the new keys:
 | `frontend/.env` | `SUPABASE_PUBLISHABLE_KEY` | publishable key (`sb_publishable_...`) |
 
 The legacy names (`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`) are still
-read as fallbacks for older projects. The `google-tts` Edge Function needs no
-key configuration: Supabase injects `SUPABASE_SECRET_KEYS` automatically.
+read as fallbacks for older projects.
 
 ### 2. Backend
 

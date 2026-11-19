@@ -51,9 +51,7 @@ where the OAuth redirect goes through the browser's own URL instead.
 - `lib/models/` - plain data classes (chat message, recap entry/group,
   sleep factor).
 - `lib/data/` - EN/ID copy (`strings.dart`), translation lookup tables,
-  date/weekday formatting (`date_format.dart`), and the one remaining
-  placeholder (`mock_data.dart` — the simulated STT transcript, since voice
-  capture isn't wired to a real speech-to-text service yet).
+  and date/weekday formatting (`date_format.dart`).
 - `lib/services/` - `AuthService` (the only place that touches Supabase
   Auth directly), `ApiClient` (adds the bearer token to every backend
   call), and `ChatService`/`RecapService`/`ProfileService` on top of it.
@@ -66,14 +64,11 @@ where the OAuth redirect goes through the browser's own URL instead.
 - `lib/widgets/` - shared pieces: crescent-moon/sun icons (custom painters),
   segmented toggle, filter pill, chat bubble, typing indicator, sleep bar
   chart, factor tile, bottom nav bar, breathing circle, twinkling
-  `StarFieldBackground`, `MicPermissionModal`, `DeleteConfirmModal`,
+  `StarFieldBackground`, `DeleteConfirmModal`,
   `NotificationBanner`, `GoogleLogo` (rendered via `flutter_svg`).
 
 ## Feature notes
 
-- **Mic permission**: the first tap on the mic in a check-in shows an
-  Allow/Not Now prompt (`AppState.micPermStatus`); denying it silently
-  no-ops on later taps rather than re-prompting.
 - **Delete confirmation**: the recap detail trash icon now opens a confirm
   step (`requestDeleteEntry` → `showDeleteConfirm`) before the entry is
   actually removed.
@@ -87,13 +82,11 @@ where the OAuth redirect goes through the browser's own URL instead.
 
 ## Notes on fidelity
 
-- Voice capture is still simulated with a timer and a fixed sample phrase
-  (`mock_data.dart`) — real speech-to-text isn't wired up yet. Everything
-  downstream of that (chat replies, crisis detection, sleep-factor
-  detection) is real and comes from the backend.
+- Chat replies, crisis detection and sleep-factor detection are real and
+  come from the backend.
 - The crisis-line handling (Healing119, 119 ext. 8) is a real rule-based check
   on the backend (`app/services/safety.py`), not LLM-decided.
-- A few icons (mic, send, back, delete, nav icons) use standard Material
+- A few icons (send, back, delete, nav icons) use standard Material
   icons as stand-ins for the design's hand-drawn SVGs; the moon and sun,
   which recur throughout and define the app's day/night identity, are
   recreated as custom painters for fidelity.

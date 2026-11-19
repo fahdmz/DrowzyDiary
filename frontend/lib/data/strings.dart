@@ -52,17 +52,10 @@ class UiStrings {
     required this.navCheckin,
     required this.navProfile,
     required this.listeningNoJudgment,
-    required this.listening,
-    required this.typeOrSpeak,
-    required this.voiceInputCaption,
-    required this.aiVoiceCaption,
+    required this.typeMessage,
     required this.high,
     required this.medium,
     required this.low,
-    required this.micPermTitle,
-    required this.micPermBody,
-    required this.micPermAllow,
-    required this.micPermDeny,
     required this.deleteEntryTitle,
     required this.deleteEntryBody,
     required this.deleteEntryConfirm,
@@ -98,10 +91,8 @@ class UiStrings {
   final String age, save, cancel, quietHoursStartLabel, quietHoursEndLabel;
   final String language, logOut;
   final String navRecap, navCheckin, navProfile;
-  final String listeningNoJudgment, listening, typeOrSpeak;
-  final String voiceInputCaption, aiVoiceCaption;
+  final String listeningNoJudgment, typeMessage;
   final String high, medium, low;
-  final String micPermTitle, micPermBody, micPermAllow, micPermDeny;
   final String deleteEntryTitle, deleteEntryBody, deleteEntryConfirm, deleteEntryCancel;
   final String notifNow, previewNightNotif, previewMorningNotif;
   final String notifNightTitle, notifNightBody, notifMorningTitle, notifMorningBody;
@@ -171,17 +162,10 @@ const _en = UiStrings(
   navCheckin: 'Check-in',
   navProfile: 'Profile',
   listeningNoJudgment: 'Listening, no judgment',
-  listening: 'Listening…',
-  typeOrSpeak: 'Type or speak…',
-  voiceInputCaption: 'Voice input — tap to switch to AI voice replies',
-  aiVoiceCaption: 'AI reads replies aloud — tap to switch to voice input',
+  typeMessage: 'Type a message…',
   high: 'High',
   medium: 'Medium',
   low: 'Low',
-  micPermTitle: 'Allow Microphone Access',
-  micPermBody: 'DrowzyDiary uses your microphone to log check-ins by voice. Your audio is never stored.',
-  micPermAllow: 'Allow Microphone',
-  micPermDeny: 'Not Now',
   deleteEntryTitle: 'Delete this entry?',
   deleteEntryBody: "This check-in and its conversation will be permanently removed. This can't be undone.",
   deleteEntryConfirm: 'Delete Entry',
@@ -254,17 +238,10 @@ const _id = UiStrings(
   navCheckin: 'Check-in',
   navProfile: 'Profil',
   listeningNoJudgment: 'Mendengarkan, tanpa menghakimi',
-  listening: 'Mendengarkan…',
-  typeOrSpeak: 'Ketik atau bicara…',
-  voiceInputCaption: 'Input suara — ketuk untuk beralih ke balasan suara AI',
-  aiVoiceCaption: 'AI membacakan balasan — ketuk untuk beralih ke input suara',
+  typeMessage: 'Ketik pesan…',
   high: 'Tinggi',
   medium: 'Sedang',
   low: 'Rendah',
-  micPermTitle: 'Izinkan Akses Mikrofon',
-  micPermBody: 'DrowzyDiary menggunakan mikrofon untuk mencatat check-in lewat suara. Audio kamu tidak pernah disimpan.',
-  micPermAllow: 'Izinkan Mikrofon',
-  micPermDeny: 'Nanti Saja',
   deleteEntryTitle: 'Hapus entri ini?',
   deleteEntryBody: 'Check-in ini beserta percakapannya akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.',
   deleteEntryConfirm: 'Hapus Entri',

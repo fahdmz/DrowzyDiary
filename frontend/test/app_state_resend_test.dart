@@ -6,8 +6,6 @@ import 'package:drowzydiary/services/auth_service.dart';
 import 'package:drowzydiary/services/chat_service.dart';
 import 'package:drowzydiary/services/profile_service.dart';
 import 'package:drowzydiary/services/recap_service.dart';
-import 'package:drowzydiary/services/stt_service.dart';
-import 'package:drowzydiary/services/tts_service.dart';
 import 'package:drowzydiary/state/app_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthState;
@@ -23,10 +21,6 @@ class FakeAuth extends Fake implements AuthService {
 class FakeProfile extends Fake implements ProfileService {}
 
 class FakeRecaps extends Fake implements RecapService {}
-
-class FakeTts extends Fake implements TtsService {}
-
-class FakeStt extends Fake implements SttService {}
 
 class FakeChat extends Fake implements ChatService {
   final results = <Object>[];
@@ -67,8 +61,6 @@ void main() {
       chatService: chat,
       recapService: FakeRecaps(),
       profileService: FakeProfile(),
-      ttsService: FakeTts(),
-      sttService: FakeStt(),
     );
     await app.selectCheckin(CheckinMode.night);
   });
