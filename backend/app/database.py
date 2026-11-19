@@ -12,4 +12,4 @@ def get_supabase() -> Client:
     (taken from the verified JWT in app/deps.py) — RLS in schema.sql is the
     backstop for direct/anon client access, not a substitute for that."""
     settings.validate()
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+    return create_client(settings.supabase_url, settings.supabase_secret_key)

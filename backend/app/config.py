@@ -43,7 +43,12 @@ class Settings:
 
     def __init__(self) -> None:
         self.supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
-        self.supabase_service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+        # sb_secret_ key; the legacy service_role key name still works.
+        self.supabase_secret_key = (
+            os.getenv("SUPABASE_SECRET_KEY")
+            or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+            or ""
+        )
         self.supabase_jwks_cache_seconds = _positive_int(
             "SUPABASE_JWKS_CACHE_SECONDS", 600, maximum=600
         )
@@ -138,7 +143,7 @@ class Settings:
     def validate(self) -> None:
         self._require(
             ("SUPABASE_URL", self.supabase_url),
-            ("SUPABASE_SERVICE_ROLE_KEY", self.supabase_service_role_key),
+            ("SUPABASE_SECRET_KEY", self.supabase_secret_key),
         )
 
     def validate_ai(self) -> None:

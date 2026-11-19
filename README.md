@@ -84,6 +84,20 @@ tables and RLS policies. Under Authentication, make sure the project uses
 an asymmetric signing key (ES256 or RS256) — the backend verifies tokens
 against the public JWKS endpoint, not a shared secret.
 
+### API keys
+
+In the Supabase dashboard, open Project Settings > API Keys. New projects only
+have the new keys:
+
+| Where | Variable | Key |
+|---|---|---|
+| `backend/.env` | `SUPABASE_SECRET_KEY` | secret key (`sb_secret_...`) — server only, never ship it in the app |
+| `frontend/.env` | `SUPABASE_PUBLISHABLE_KEY` | publishable key (`sb_publishable_...`) |
+
+The legacy names (`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`) are still
+read as fallbacks for older projects. The `google-tts` Edge Function needs no
+key configuration: Supabase injects `SUPABASE_SECRET_KEYS` automatically.
+
 ### 2. Backend
 
 ```bash
@@ -94,7 +108,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env
 ```
 
-Fill in `.env` with your Supabase URL, service-role key, and Azure AI
+Fill in `.env` with your Supabase URL, secret key, and Azure AI
 Foundry endpoint/deployment names (see the comments in `.env.example` —
 each variable is documented there). Then:
 
@@ -108,7 +122,7 @@ API docs land at `http://localhost:8000/docs`. Run the tests with `pytest`.
 
 ```bash
 cd frontend
-cp .env.example .env   # fill in your Supabase URL/anon key
+cp .env.example .env   # fill in your Supabase URL/publishable key
 flutter pub get
 flutter run -d chrome --web-port=8080
 ```
