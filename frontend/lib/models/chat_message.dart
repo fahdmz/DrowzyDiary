@@ -1,8 +1,8 @@
 enum MessageSender { ai, user }
 
-/// A single chat turn. Crisis messages carry a split prefix/phone/suffix so
-/// the UI can render the crisis phone number as a tappable `tel:` link,
-/// mirroring the design's `dmsg.crisisPrefix` / `crisisPhone` / `crisisSuffix`.
+/// A single chat turn. Crisis messages carry their full copy in [text]; legacy
+/// rows instead split it into prefix/phone/suffix so the UI can render the
+/// phone number as a tappable `tel:` link.
 class ChatMessage {
   const ChatMessage({
     required this.id,
