@@ -34,7 +34,9 @@ def analysis():
 
 
 def test_chatbot_uses_foundry_responses_without_provider_storage():
-    responses = FakeResponses("Aku mendengarkan. Apa yang paling berat?")
+    responses = FakeResponses(
+        '{"reply": "Aku mendengarkan. Apa yang paling berat?", "should_close": false}'
+    )
     chatbot = FoundryChatbot(
         client=SimpleNamespace(responses=responses),
         deployment="gpt-chat",
@@ -52,7 +54,8 @@ def test_chatbot_uses_foundry_responses_without_provider_storage():
     )
 
     call = responses.calls[0]
-    assert reply.startswith("Aku mendengarkan")
+    assert reply.text.startswith("Aku mendengarkan")
+    assert reply.should_close is False
     assert call["model"] == "gpt-chat"
     assert call["store"] is False
     assert call["max_output_tokens"] == 700

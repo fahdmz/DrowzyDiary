@@ -2,6 +2,7 @@ import asyncio
 
 from app.schemas.analysis import AnalysisResult, AnalysisSource, Emotion, RiskLevel
 from app.services.chat_orchestrator import ChatOrchestrator, SessionCompletedError
+from app.services.foundry_chatbot import ChatbotReply
 from app.services.safety import SafetyScreen
 
 
@@ -40,7 +41,7 @@ class FakeChatbot:
         self.calls.append(kwargs)
         if self.error:
             raise self.error
-        return self.reply
+        return ChatbotReply(text=self.reply, should_close=False)
 
 
 class FakeRepository:
@@ -78,6 +79,9 @@ class FakeRepository:
 
     def mark_session_crisis(self, session_id):
         self.crisis_sessions.append(session_id)
+
+    def count_user_messages(self, session_id):
+        return sum(1 for m in self.messages if m["sender"] == "user")
 
     def load_chat_context(self, user_id, session_id):
         return {

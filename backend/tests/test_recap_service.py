@@ -1,6 +1,6 @@
 import asyncio
 
-from app.services.recap_generator import EmotionalTrend, RecapOutput
+from app.services.recap_generator import PROMPT_VERSION, EmotionalTrend, RecapOutput
 from app.services.recap_service import RecapService
 
 
@@ -74,4 +74,4 @@ def test_completed_owned_session_generates_and_persists_one_recap():
         }
     ]
     assert repository.saved[0]["model_deployment"] == "gpt-recap"
-    assert repository.saved[0]["prompt_version"] == "recap-id-v1"
+    assert repository.saved[0]["prompt_version"] == PROMPT_VERSION == "recap-id-v2"
