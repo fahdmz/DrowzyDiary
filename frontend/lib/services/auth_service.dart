@@ -26,7 +26,11 @@ class AuthService {
     );
   }
 
-  factory AuthService.instance() => AuthService(Supabase.instance.client);
+  static AuthService? _instance;
+  Future<bool>? _refreshing;
+
+  factory AuthService.instance() =>
+      _instance ??= AuthService(Supabase.instance.client);
 
   Session? get currentSession => _client.auth.currentSession;
   String? get accessToken => currentSession?.accessToken;
@@ -75,4 +79,29 @@ class AuthService {
   }
 
   Future<void> signOut() => _client.auth.signOut();
+
+  /// Refreshes the access token. Concurrent callers share one refresh, since
+  /// a refresh token can only be used once.
+  Future<bool> refreshSession() =>
+      _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+
+  Future<bool> _doRefresh() async {
+    try {
+      final res = await _client.auth.refreshSession();
+      return res.session != null;
+    } catch (e) {
+      debugPrint('Session refresh failed: $e');
+      return false;
+    }
+  }
+
+  /// Ends the local session without a server call (the token is already
+  /// rejected); fires the signedOut auth event.
+  Future<void> expireSession() async {
+    try {
+      await _client.auth.signOut(scope: SignOutScope.local);
+    } catch (e) {
+      debugPrint('Local sign-out failed: $e');
+    }
+  }
 }

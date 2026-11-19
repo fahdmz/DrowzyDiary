@@ -77,6 +77,12 @@ class AppState extends ChangeNotifier {
     _authSub = _authService.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.signedIn && screen == AppScreen.auth) {
         goHome();
+      } else if (data.event == AuthChangeEvent.signedOut &&
+          !_signingOut &&
+          screen != AppScreen.auth) {
+        // ApiClient ended the session after a 401 it couldn't recover from.
+        _resetToAuth();
+        _showBanner(message: t.noticeSessionExpired);
       }
     });
   }
@@ -88,6 +94,7 @@ class AppState extends ChangeNotifier {
   final TtsService _ttsService;
   final SttService _sttService;
   StreamSubscription<AuthState>? _authSub;
+  bool _signingOut = false;
 
   AppScreen screen = AppScreen.auth;
   AuthMode authMode = AuthMode.login;
@@ -124,6 +131,10 @@ class AppState extends ChangeNotifier {
   /// Check-in tab are currently showing in [NotificationBanner].
   CheckinMode? notifPreviewType;
   bool notifOpen = false;
+
+  /// Non-null while the banner is showing an error/status notice rather than
+  /// a check-in reminder.
+  String? notifMessage;
   Timer? _notifTimer;
 
   String? expandedFactorKey;
@@ -171,7 +182,8 @@ class AppState extends ChangeNotifier {
       await goHome();
     } on AuthException catch (e) {
       authError = e.message;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Auth failed: $e');
       authError = 'Something went wrong. Please try again.';
     } finally {
       isAuthLoading = false;
@@ -193,7 +205,8 @@ class AppState extends ChangeNotifier {
       await goHome();
     } on AuthException catch (e) {
       authError = e.message;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Auth failed: $e');
       authError = 'Something went wrong. Please try again.';
     } finally {
       isAuthLoading = false;
@@ -213,7 +226,8 @@ class AppState extends ChangeNotifier {
       await _authService.signInWithGoogle();
     } on AuthException catch (e) {
       authError = e.message;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Auth failed: $e');
       authError = 'Something went wrong. Please try again.';
     } finally {
       isGoogleLoading = false;
@@ -284,7 +298,8 @@ class AppState extends ChangeNotifier {
         ..clear()
         ..addAll(started.messages);
       return started.sessionId;
-    } catch (_) {
+    } catch (e) {
+      _reportError(e, t.noticeConnection, 'Starting chat session failed');
       return null;
     }
   }
@@ -307,11 +322,18 @@ class AppState extends ChangeNotifier {
 
   Future<void> logOut() async {
     await _ttsService.stop();
+    _signingOut = true;
     try {
       await _authService.signOut();
-    } catch (_) {
-      // fall through to local reset regardless
+    } catch (e) {
+      debugPrint('Sign-out failed, resetting locally anyway: $e');
+    } finally {
+      _signingOut = false;
     }
+    _resetToAuth();
+  }
+
+  void _resetToAuth() {
     screen = AppScreen.auth;
     authMode = AuthMode.login;
     activeTab = HomeTab.checkin;
@@ -394,12 +416,20 @@ class AppState extends ChangeNotifier {
       _speak(result.aiMessage);
       _refreshStatsAfterChatTurn(sessionCompleted: result.sessionCompleted);
       if (result.sessionCompleted) checkinCompleted = true;
-    } catch (_) {
-      messages.add(ChatMessage(
-        id: DateTime.now().microsecondsSinceEpoch,
-        sender: MessageSender.ai,
-        text: _connectionErrorText,
-      ));
+    } catch (e) {
+      debugPrint('Sending message failed: $e');
+      if (e is ApiException && e.isRateLimited) {
+        // Rejected before anything was saved: hand the text back to retry.
+        messages.removeLast();
+        draft = text;
+        _showBanner(message: t.noticeRateLimited);
+      } else {
+        messages.add(ChatMessage(
+          id: DateTime.now().microsecondsSinceEpoch,
+          sender: MessageSender.ai,
+          text: _connectionErrorText,
+        ));
+      }
     } finally {
       aiTyping = false;
       notifyListeners();
@@ -507,8 +537,13 @@ class AppState extends ChangeNotifier {
       recapData = groups;
       recapsLoaded = true;
       notifyListeners();
-    } catch (_) {
+    } catch (e) {
       // keep whatever was last loaded rather than wiping the screen
+      if (recapsLoaded) {
+        debugPrint('Refreshing recaps failed: $e');
+      } else {
+        _reportError(e, t.noticeConnection, 'Loading recaps failed');
+      }
     }
   }
 
@@ -542,8 +577,8 @@ class AppState extends ChangeNotifier {
         }
       }
       notifyListeners();
-    } catch (_) {
-      // detail screen just shows an empty transcript
+    } catch (e) {
+      _reportError(e, t.noticeConnection, 'Loading recap transcript failed');
     }
   }
 
@@ -575,9 +610,10 @@ class AppState extends ChangeNotifier {
 
     try {
       await _recapService.deleteRecap(id);
-    } catch (_) {
-      // already removed locally; a stale row server-side will just get
-      // filtered out again next time loadRecaps() runs
+    } catch (e) {
+      // The entry still exists server-side, so say so and put it back.
+      _reportError(e, t.noticeDeleteFailed, 'Deleting recap failed');
+      await loadRecaps();
     }
   }
 
@@ -640,18 +676,39 @@ class AppState extends ChangeNotifier {
 
   // --- notification preview ------------------------------------------------
 
-  void previewNightNotif() => _showNotifBanner(CheckinMode.night);
-  void previewMorningNotif() => _showNotifBanner(CheckinMode.morning);
+  void previewNightNotif() => _showBanner(type: CheckinMode.night);
+  void previewMorningNotif() => _showBanner(type: CheckinMode.morning);
 
-  void _showNotifBanner(CheckinMode type) {
+  /// Shows the banner with either a check-in reminder ([type]) or a plain
+  /// notice ([message]) — errors reuse the reminder banner's slide-in/timeout.
+  void _showBanner({CheckinMode? type, String? message}) {
     _notifTimer?.cancel();
     notifPreviewType = type;
+    notifMessage = message;
     notifOpen = true;
     notifyListeners();
     _notifTimer = Timer(const Duration(seconds: 6), () {
       notifOpen = false;
       notifyListeners();
     });
+  }
+
+  /// Logs the error for debug builds and shows the user a short notice —
+  /// the specific one for rate limits, busy/unavailable, timeouts and expired
+  /// sessions, otherwise [fallback].
+  void _reportError(Object error, String fallback, String context) {
+    debugPrint('$context: $error');
+    _showBanner(message: _noticeFor(error, fallback));
+  }
+
+  String _noticeFor(Object error, String fallback) {
+    if (error is ApiTimeoutException) return t.noticeTimeout;
+    if (error is ApiException) {
+      if (error.isRateLimited) return t.noticeRateLimited;
+      if (error.isUnavailable) return t.noticeBusy;
+      if (error.isUnauthorized) return t.noticeSessionExpired;
+    }
+    return fallback;
   }
 
   void dismissNotifBanner() {
@@ -663,6 +720,7 @@ class AppState extends ChangeNotifier {
   /// Tapping the banner itself, like tapping a real push notification, deep
   /// links straight into that check-in's chat.
   Future<void> openNotifBanner() async {
+    if (notifMessage != null) return dismissNotifBanner();
     final type = notifPreviewType;
     _notifTimer?.cancel();
     notifOpen = false;
@@ -683,8 +741,8 @@ class AppState extends ChangeNotifier {
       quietHoursEnd = profile.quietHoursEnd;
       fullName = profile.fullName;
       notifyListeners();
-    } catch (_) {
-      // keep local defaults if the profile can't be fetched yet
+    } catch (e) {
+      debugPrint('Loading profile failed, keeping local defaults: $e');
     }
   }
 
@@ -701,8 +759,8 @@ class AppState extends ChangeNotifier {
       avgSleepTimeDisplay = stats.avgSleepTime;
       avgWakeTimeDisplay = stats.avgWakeTime;
       notifyListeners();
-    } catch (_) {
-      // chart just shows zeros until this succeeds
+    } catch (e) {
+      debugPrint('Loading weekly sleep failed: $e');
     }
   }
 
@@ -722,8 +780,8 @@ class AppState extends ChangeNotifier {
               ))
           .toList();
       notifyListeners();
-    } catch (_) {
-      // Profile tab just shows no influencers yet
+    } catch (e) {
+      debugPrint('Loading sleep factors failed: $e');
     }
   }
 
@@ -744,8 +802,8 @@ class AppState extends ChangeNotifier {
     try {
       await _profileService.updateProfile(
           quietHoursStart: start, quietHoursEnd: end);
-    } catch (_) {
-      // best-effort sync; local value already reflects the user's pick
+    } catch (e) {
+      _reportError(e, t.noticeSettingsFailed, 'Saving quiet hours failed');
     }
   }
 
@@ -754,8 +812,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await _profileService.updateProfile(bedtimeMode: bedtimeMode);
-    } catch (_) {
-      // best-effort sync; local toggle already reflects the user's tap
+    } catch (e) {
+      _reportError(e, t.noticeSettingsFailed, 'Saving bedtime mode failed');
     }
   }
 
@@ -777,8 +835,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await _profileService.updateProfile(age: age);
-    } catch (_) {
-      // best-effort sync
+    } catch (e) {
+      _reportError(e, t.noticeSettingsFailed, 'Saving age failed');
     }
   }
 
@@ -787,8 +845,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await _profileService.updateProfile(language: value.name);
-    } catch (_) {
-      // best-effort sync
+    } catch (e) {
+      _reportError(e, t.noticeSettingsFailed, 'Saving language failed');
     }
   }
 

@@ -14,6 +14,7 @@ class NotificationBanner extends StatelessWidget {
     super.key,
     required this.open,
     required this.type,
+    this.message,
     required this.t,
     required this.onTap,
     required this.onDismiss,
@@ -21,12 +22,17 @@ class NotificationBanner extends StatelessWidget {
 
   final bool open;
   final CheckinMode? type;
+
+  /// When set, the banner shows this plain notice (errors, status) instead of
+  /// a check-in reminder.
+  final String? message;
   final UiStrings t;
   final VoidCallback onTap;
   final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
+    final notice = message;
     final isNight = type != CheckinMode.morning;
     final title = type == CheckinMode.morning ? t.notifMorningTitle : t.notifNightTitle;
     final body = type == CheckinMode.morning ? t.notifMorningBody : t.notifNightBody;
@@ -57,7 +63,9 @@ class NotificationBanner extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(10)),
                 child: Center(
-                  child: isNight
+                  child: notice != null
+                      ? Icon(Icons.info_outline, size: 18, color: iconColor)
+                      : isNight
                       ? CrescentMoonIcon(color: iconColor, size: 17)
                       : SunIcon(color: iconColor, size: 16, rayCount: 8),
                 ),
@@ -78,13 +86,15 @@ class NotificationBanner extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 2),
+                    if (notice == null) ...[
+                      Text(
+                        title,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFEDE7E2)),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
                     Text(
-                      title,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFEDE7E2)),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      body,
+                      notice ?? body,
                       style: const TextStyle(fontSize: 12.5, height: 1.4, color: Color(0x99EDE7E2)),
                     ),
                   ],
