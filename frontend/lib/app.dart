@@ -68,6 +68,7 @@ class _ScreenSwitcher extends StatelessWidget {
             NotificationBanner(
               open: app.notifOpen,
               type: app.notifPreviewType,
+              message: app.notifMessage,
               t: app.t,
               onTap: app.openNotifBanner,
               onDismiss: app.dismissNotifBanner,

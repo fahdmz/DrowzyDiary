@@ -76,6 +76,13 @@ class UiStrings {
     required this.notifMorningBody,
     required this.checkinReadOnlyNotice,
     required this.viewFullChat,
+    required this.noticeConnection,
+    required this.noticeTimeout,
+    required this.noticeRateLimited,
+    required this.noticeBusy,
+    required this.noticeSessionExpired,
+    required this.noticeDeleteFailed,
+    required this.noticeSettingsFailed,
   });
 
   final String tagline, logIn, signUp, fullName, email, password;
@@ -100,6 +107,7 @@ class UiStrings {
   final String notifNightTitle, notifNightBody, notifMorningTitle, notifMorningBody;
   final String checkinReadOnlyNotice;
   final String viewFullChat;
+  final String noticeConnection, noticeTimeout, noticeRateLimited, noticeBusy, noticeSessionExpired, noticeDeleteFailed, noticeSettingsFailed;
 
   String levelLabel(FactorLevel level) {
     switch (level) {
@@ -187,6 +195,13 @@ const _en = UiStrings(
   notifMorningBody: 'How did you sleep? Log your morning check-in.',
   checkinReadOnlyNotice: "Today's check-in — already logged",
   viewFullChat: 'View full chat',
+  noticeConnection: "Couldn't reach DrowzyDiary. Check your connection and try again.",
+  noticeTimeout: "That took too long. Please try again.",
+  noticeRateLimited: "You're sending messages quickly — please wait a moment.",
+  noticeBusy: "Still working on this — please try again in a few seconds.",
+  noticeSessionExpired: "Your session expired. Please sign in again.",
+  noticeDeleteFailed: "Couldn't delete that entry. Please try again.",
+  noticeSettingsFailed: "Couldn't save your change. Please try again.",
 );
 
 const _id = UiStrings(
@@ -263,6 +278,13 @@ const _id = UiStrings(
   notifMorningBody: 'Bagaimana tidurmu? Catat check-in pagi kamu.',
   checkinReadOnlyNotice: 'Check-in hari ini — sudah tercatat',
   viewFullChat: 'Lihat percakapan lengkap',
+  noticeConnection: "Tidak bisa terhubung ke DrowzyDiary. Periksa koneksimu dan coba lagi.",
+  noticeTimeout: "Terlalu lama merespons. Silakan coba lagi.",
+  noticeRateLimited: "Kamu mengirim pesan terlalu cepat — tunggu sebentar ya.",
+  noticeBusy: "Masih diproses — coba lagi dalam beberapa detik.",
+  noticeSessionExpired: "Sesi kamu berakhir. Silakan masuk lagi.",
+  noticeDeleteFailed: "Entri tidak bisa dihapus. Silakan coba lagi.",
+  noticeSettingsFailed: "Perubahan tidak bisa disimpan. Silakan coba lagi.",
 );
 
 UiStrings uiStringsFor(AppLanguage lang) => lang == AppLanguage.en ? _en : _id;
