@@ -5,7 +5,6 @@
 project_id = "pillowtalk"
 
 [functions.google-tts]
-# The platform verifies the caller's Supabase JWT before this function's
-# code runs — an unauthenticated request is rejected with 401 automatically.
-# See https://supabase.com/docs/guides/functions/auth.
+# The platform only checks the JWT signature, which the public anon key also
+# passes. The function itself requires a signed-in user and rate-limits them.
 verify_jwt = true
