@@ -10,9 +10,9 @@
 -- unedited does nothing.
 --
 -- "Today" is calculated in Asia/Jakarta, matching the app user's local day.
--- Deleting chat_sessions cascades to chat_messages, message_analyses, and
--- session_recaps. sleep_factor_occurrences are deleted explicitly first
--- because their session_id foreign key uses ON DELETE SET NULL.
+-- Deleting chat_sessions cascades to chat_messages, message_analyses,
+-- safety_events, session_recaps, sleep_logs and sleep_factor_occurrences
+-- (see session_delete_cascade.sql).
 
 begin;
 
@@ -38,11 +38,6 @@ from public.chat_sessions
 where user_id = (select user_id from params)
   and started_at >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'
   and started_at < (date_trunc('day', now() at time zone 'Asia/Jakarta') + interval '1 day') at time zone 'Asia/Jakarta';
-
-delete from public.sleep_factor_occurrences occurrence
-where occurrence.session_id in (
-  select id from today_sessions_to_delete
-);
 
 delete from public.chat_sessions session
 where session.id in (

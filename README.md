@@ -73,8 +73,20 @@ You'll need one Supabase project shared between both apps.
 
 ### 1. Database
 
-In the Supabase SQL editor, run `backend/sql/schema.sql` once to create the
-tables and RLS policies. Under Authentication, make sure the project uses
+In the Supabase SQL editor, run these setup migrations once, in this order:
+
+1. `backend/sql/schema.sql`
+2. `backend/sql/ai_emotional_memory.sql`
+3. `backend/sql/chat_idempotency.sql`
+4. `backend/sql/session_delete_cascade.sql`
+5. `backend/sql/chat_rls_read_delete_only.sql`
+6. `backend/sql/sleep_factor_orphan_cleanup.sql`
+7. `backend/sql/service_role_grants.sql` (last)
+
+`backend/sql/delete_today_checkins.sql` is a dev tool for wiping one user's
+check-ins for today. It is not a setup step.
+
+Under Authentication, make sure the project uses
 an asymmetric signing key (ES256 or RS256) — the backend verifies tokens
 against the public JWKS endpoint, not a shared secret.
 

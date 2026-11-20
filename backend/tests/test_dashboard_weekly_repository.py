@@ -9,8 +9,10 @@ class Query:
         self.client = client
         self.table = table
         self.filters = []
+        self.columns = None
 
     def select(self, columns):
+        self.columns = columns
         return self
 
     def eq(self, column, value):
@@ -36,12 +38,12 @@ class Query:
 class FakeSupabase:
     def __init__(self):
         self.responses = {
-            "chat_sessions": [[{"id": "session-1"}]],
             "message_analyses": [[{
                 "session_id": "session-1",
                 "sleep_hours": 7.5,
                 "wake_time": "06:30",
                 "created_at": "2026-07-17T01:00:00+00:00",
+                "chat_messages": {"chat_sessions": {"user_id": "user-1"}},
             }]],
         }
         self.queries = []
@@ -50,7 +52,7 @@ class FakeSupabase:
         return Query(self, name)
 
 
-def test_weekly_sleep_repository_scopes_analyses_through_owned_sessions():
+def test_weekly_sleep_repository_scopes_analyses_by_user_join():
     sb = FakeSupabase()
     since = datetime(2026, 7, 11, 17, 0, tzinfo=timezone.utc)
 
@@ -59,8 +61,15 @@ def test_weekly_sleep_repository_scopes_analyses_through_owned_sessions():
         since=since,
     )
 
-    session_query, analysis_query = sb.queries
-    assert ("eq", "user_id", "user-1") in session_query.filters
-    assert ("in", "session_id", ["session-1"]) in analysis_query.filters
+    (analysis_query,) = sb.queries
+    assert analysis_query.table == "message_analyses"
+    assert "chat_messages!inner(chat_sessions!inner(user_id))" in analysis_query.columns
+    assert ("eq", "chat_messages.chat_sessions.user_id", "user-1") in analysis_query.filters
+    assert not any(kind == "in" for kind, *_ in analysis_query.filters)
     assert ("gte", "created_at", since.isoformat()) in analysis_query.filters
-    assert rows[0]["sleep_hours"] == 7.5
+    assert rows == [{
+        "session_id": "session-1",
+        "sleep_hours": 7.5,
+        "wake_time": "06:30",
+        "created_at": "2026-07-17T01:00:00+00:00",
+    }]

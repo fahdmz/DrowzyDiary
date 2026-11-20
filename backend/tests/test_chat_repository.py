@@ -13,9 +13,11 @@ class Query:
         self.payload = None
         self.filters = []
         self.limit_value = None
+        self.columns = None
 
     def select(self, columns, **kwargs):
         self.operation = "select"
+        self.columns = columns
         return self
 
     def insert(self, payload):
@@ -106,12 +108,12 @@ def test_context_queries_are_bounded_and_historical_analysis_is_aggregated():
     responses = {
         ("chat_messages", "select"): [[{"sender": "user", "text": "latest"}]],
         ("session_recaps", "select"): [[{"title": "Kemarin", "summary": "Berat"}]],
-        ("chat_sessions", "select"): [[{"id": "session-1"}]],
         ("message_analyses", "select"): [[{
             "emotion": "sadness",
             "domains": ["work"],
             "sleep_substances": ["caffeine"],
             "sleep_hours": 5,
+            "chat_messages": {"chat_sessions": {"user_id": "user-1"}},
         }]],
     }
     sb = FakeSupabase(responses)
@@ -125,10 +127,34 @@ def test_context_queries_are_bounded_and_historical_analysis_is_aggregated():
 
     context = repository.load_chat_context("user-1", "session-1")
 
-    message_query, recap_query, session_query, analysis_query = sb.calls
+    message_query, recap_query, analysis_query = sb.calls
     assert message_query.limit_value == 12
     assert recap_query.limit_value == 3
-    assert ("eq", "user_id", "user-1") in session_query.filters
-    assert ("in", "session_id", ["session-1"]) in analysis_query.filters
+    assert "chat_messages!inner(chat_sessions!inner(user_id))" in analysis_query.columns
+    assert ("eq", "chat_messages.chat_sessions.user_id", "user-1") in analysis_query.filters
+    assert not any(item[0] == "in" for item in analysis_query.filters)
     assert any(item[:2] == ("gte", "created_at") for item in analysis_query.filters)
     assert context["emotional_trends"]["emotion_counts"] == {"sadness": 1}
+
+
+def test_mark_session_crisis_scopes_update_by_session_and_user():
+    sb = FakeSupabase()
+
+    SupabaseChatRepository(sb).mark_session_crisis("session-1", "user-1")
+
+    update = sb.calls[0]
+    assert (update.table, update.operation) == ("chat_sessions", "update")
+    assert ("eq", "id", "session-1") in update.filters
+    assert ("eq", "user_id", "user-1") in update.filters
+
+
+def test_mark_session_completed_scopes_update_by_session_and_user():
+    sb = FakeSupabase({("chat_messages", "select"): [[{"text": "first"}]]})
+
+    SupabaseChatRepository(sb).mark_session_completed("session-1", "user-1")
+
+    update = next(call for call in sb.calls if call.operation == "update")
+    assert update.table == "chat_sessions"
+    assert update.payload["preview"] == "first"
+    assert ("eq", "id", "session-1") in update.filters
+    assert ("eq", "user_id", "user-1") in update.filters

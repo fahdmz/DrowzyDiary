@@ -8,8 +8,10 @@ class Query:
         self.client = client
         self.table = table
         self.filters = []
+        self.columns = None
 
     def select(self, columns):
+        self.columns = columns
         return self
 
     def eq(self, column, value):
@@ -32,8 +34,6 @@ class Query:
 
     def execute(self):
         self.client.calls.append(self)
-        if self.table == "chat_sessions":
-            return SimpleNamespace(data=[{"id": "session-1"}, {"id": "session-2"}])
         return SimpleNamespace(data=[])
 
 
@@ -45,13 +45,14 @@ class FakeSupabase:
         return Query(self, name)
 
 
-def test_historical_analysis_uses_owned_session_ids_with_service_role_client():
+def test_historical_analysis_is_scoped_by_user_join_without_session_id_list():
     sb = FakeSupabase()
     repository = SupabaseChatRepository(sb)
 
     repository.load_chat_context("user-1", "session-1")
 
-    owned_sessions = next(call for call in sb.calls if call.table == "chat_sessions")
+    assert not any(call.table == "chat_sessions" for call in sb.calls)
     analysis_query = next(call for call in sb.calls if call.table == "message_analyses")
-    assert ("eq", "user_id", "user-1") in owned_sessions.filters
-    assert ("in", "session_id", ["session-1", "session-2"]) in analysis_query.filters
+    assert "chat_messages!inner(chat_sessions!inner(user_id))" in analysis_query.columns
+    assert ("eq", "chat_messages.chat_sessions.user_id", "user-1") in analysis_query.filters
+    assert not any(kind == "in" for kind, *_ in analysis_query.filters)
