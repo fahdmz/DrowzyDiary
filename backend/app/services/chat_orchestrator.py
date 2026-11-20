@@ -89,7 +89,7 @@ class ChatOrchestrator:
             await asyncio.to_thread(
                 self.repository.save_safety_event, user_message["id"], session_id, safety
             )
-            await asyncio.to_thread(self.repository.mark_session_crisis, session_id)
+            await asyncio.to_thread(self.repository.mark_session_crisis, session_id, user_id)
             safety_message = build_safety_message(
                 language="id" if language == "id" else "en",
                 resource_name=self.resource_name,
@@ -151,7 +151,9 @@ class ChatOrchestrator:
         ai_wants_close = reply.should_close and user_turns >= _MIN_USER_TURNS_BEFORE_AI_CLOSE
         session_status = session["status"]
         if hit_cap or ai_wants_close:
-            await asyncio.to_thread(self.repository.mark_session_completed, session_id)
+            await asyncio.to_thread(
+                self.repository.mark_session_completed, session_id, user_id
+            )
             session_status = "completed"
             if self.recap_service is not None:
                 spawn_background(

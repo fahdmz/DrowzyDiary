@@ -134,10 +134,10 @@ class SupabaseChatRepository:
             }
         ).execute()
 
-    def mark_session_crisis(self, session_id: str) -> None:
+    def mark_session_crisis(self, session_id: str, user_id: str) -> None:
         self.supabase.table("chat_sessions").update({"is_crisis": True}).eq(
             "id", session_id
-        ).execute()
+        ).eq("user_id", user_id).execute()
 
     def count_user_messages(self, session_id: str) -> int:
         res = (
@@ -149,7 +149,7 @@ class SupabaseChatRepository:
         )
         return res.count or 0
 
-    def mark_session_completed(self, session_id: str) -> None:
+    def mark_session_completed(self, session_id: str, user_id: str) -> None:
         """Ends a check-in from within the conversation itself (AI-signaled
         close or the turn cap) — same finalization shape as the day-rollover
         path in routers/chat.py, just triggered mid-conversation."""
@@ -172,7 +172,7 @@ class SupabaseChatRepository:
                 "ended_at": datetime.now(timezone.utc).isoformat(),
                 "preview": preview,
             }
-        ).eq("id", session_id).execute()
+        ).eq("id", session_id).eq("user_id", user_id).execute()
 
     def load_chat_context(self, user_id: str, session_id: str) -> dict[str, Any]:
         newest_messages = (
@@ -199,29 +199,21 @@ class SupabaseChatRepository:
             .data
             or []
         )
-        owned_sessions = (
-            self.supabase.table("chat_sessions")
-            .select("id")
-            .eq("user_id", user_id)
+        since = self.now_factory() - timedelta(days=self.lookback_days)
+        analyses = (
+            self.supabase.table("message_analyses")
+            .select(
+                "emotion,domains,sleep_substances,sleep_hours,wake_time,created_at,"
+                "chat_messages!inner(chat_sessions!inner(user_id))"
+            )
+            .eq("chat_messages.chat_sessions.user_id", user_id)
+            .gte("created_at", since.isoformat())
             .execute()
             .data
             or []
         )
-        session_ids = [row["id"] for row in owned_sessions]
-        analyses: list[dict[str, Any]] = []
-        if session_ids:
-            since = self.now_factory() - timedelta(days=self.lookback_days)
-            analyses = (
-                self.supabase.table("message_analyses")
-                .select(
-                    "emotion,domains,sleep_substances,sleep_hours,wake_time,created_at"
-                )
-                .in_("session_id", session_ids)
-                .gte("created_at", since.isoformat())
-                .execute()
-                .data
-                or []
-            )
+        for row in analyses:
+            row.pop("chat_messages", None)
         return build_chat_context(
             messages=list(reversed(newest_messages)),
             recaps=recaps,

@@ -25,7 +25,7 @@ class GatedRecapService:
 
 def test_recap_task_is_strongly_referenced_until_it_finishes():
     repository = FakeRepository()
-    repository.mark_session_completed = lambda session_id: None
+    repository.mark_session_completed = lambda session_id, user_id: None
 
     async def scenario():
         recap_service = GatedRecapService()

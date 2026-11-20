@@ -77,8 +77,8 @@ class FakeRepository:
     def save_safety_event(self, message_id, session_id, result):
         self.safety_events.append((message_id, session_id, result))
 
-    def mark_session_crisis(self, session_id):
-        self.crisis_sessions.append(session_id)
+    def mark_session_crisis(self, session_id, user_id):
+        self.crisis_sessions.append((session_id, user_id))
 
     def count_user_messages(self, session_id):
         return sum(1 for m in self.messages if m["sender"] == "user")
@@ -122,7 +122,7 @@ def test_critical_message_bypasses_all_models_and_persists_minimal_safety_metada
     assert result.ai_message["is_crisis"] is True
     assert repository.safety_events[0][2].risk_level is RiskLevel.CRITICAL
     assert repository.analyses[0][2].source is AnalysisSource.RULES
-    assert repository.crisis_sessions == ["session-1"]
+    assert repository.crisis_sessions == [("session-1", "user-1")]
 
 
 def test_normal_message_is_analyzed_before_bounded_context_reaches_chatbot():

@@ -29,8 +29,18 @@ Fill in the Supabase URL and the secret key (`SUPABASE_SECRET_KEY`,
 dashboard, make sure Authentication uses an asymmetric signing key (ES256 or
 RS256). The JWKS URL is derived automatically from `SUPABASE_URL`.
 
-Run `sql/schema.sql` once in the Supabase SQL editor to create the tables and
-row-level-security policies.
+In the Supabase SQL editor, run these setup migrations once, in this order:
+
+1. `sql/schema.sql`
+2. `sql/ai_emotional_memory.sql`
+3. `sql/chat_idempotency.sql`
+4. `sql/session_delete_cascade.sql`
+5. `sql/chat_rls_read_delete_only.sql`
+6. `sql/sleep_factor_orphan_cleanup.sql`
+7. `sql/service_role_grants.sql` (last)
+
+`sql/delete_today_checkins.sql` is a dev tool for wiping one user's
+check-ins for today. It is not a setup step.
 
 ## Run
 

@@ -20,29 +20,22 @@ class SupabaseDashboardRepository:
         user_id: str,
         since: datetime,
     ) -> list[dict[str, Any]]:
-        sessions = (
-            self.supabase.table("chat_sessions")
-            .select("id")
-            .eq("user_id", user_id)
-            .execute()
-            .data
-            or []
-        )
-        session_ids = [session["id"] for session in sessions]
-        if not session_ids:
-            return []
-        return (
+        rows = (
             self.supabase.table("message_analyses")
             .select(
-                "session_id,sleep_hours,wake_time,source,confidence,created_at"
+                "session_id,sleep_hours,wake_time,source,confidence,created_at,"
+                "chat_messages!inner(chat_sessions!inner(user_id))"
             )
-            .in_("session_id", session_ids)
+            .eq("chat_messages.chat_sessions.user_id", user_id)
             .gte("created_at", since.isoformat())
             .order("created_at")
             .execute()
             .data
             or []
         )
+        for row in rows:
+            row.pop("chat_messages", None)
+        return rows
 
     def load_sleep_factors(
         self,
