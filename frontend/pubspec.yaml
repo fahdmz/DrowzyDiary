@@ -17,6 +17,9 @@ dependencies:
   http: ^1.2.0
   flutter_svg: ^2.0.10
   flutter_dotenv: ^5.2.1
+  flutter_edge_ai: ^2.6.0
+  flutter_edge_ai_litertlm: ^1.20.2
+  flutter_edge_ai_builtin_ai: ^0.4.2
 
 dev_dependencies:
   flutter_test:

@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'prototype/prototype_launcher.dart';
 import 'screens/auth_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/home_screen.dart';
@@ -73,6 +75,7 @@ class _ScreenSwitcher extends StatelessWidget {
               onTap: app.openNotifBanner,
               onDismiss: app.dismissNotifBanner,
             ),
+            if (kDebugMode && PrototypeLauncher.enabled) const PrototypeLauncher(),
           ],
         ),
       ),
