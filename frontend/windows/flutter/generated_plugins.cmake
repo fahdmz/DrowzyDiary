@@ -4,6 +4,8 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
+  flutter_edge_ai
+  flutter_local_ai
   url_launcher_windows
 )
 
